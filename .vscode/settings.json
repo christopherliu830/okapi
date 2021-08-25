@@ -1,0 +1,33 @@
+{
+  "cmake.configureSettings": {
+    "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+  },
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/**",
+    "C:/vcpkg/installed/x64-windows/include/"
+  ],
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.defines": ["_DEBUG"],
+  "[cpp]": {
+    "editor.wordBasedSuggestions": false,
+    "editor.suggest.insertMode": "replace",
+    "editor.semanticHighlighting.enabled": true,
+    "editor.tabSize": 4
+  },
+  "[Log]": {
+    "editor.wordWrap": "off",
+    "editor.fontFamily": "Consolas, 'Courier New', monospace"
+  },
+  "files.associations": {
+    "regex": "cpp",
+    "xiosbase": "cpp",
+    "vector": "cpp",
+    "set": "cpp",
+    "iostream": "cpp",
+    "functional": "cpp",
+    "system_error": "cpp",
+    "type_traits": "cpp",
+    "xtr1common": "cpp",
+    "*.rh": "cpp"
+  }
+}
