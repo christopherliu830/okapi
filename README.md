@@ -11,7 +11,7 @@ Updated in my free time.
 - Vulkan Memory Allocator
 
 ## Roadmap
-1. Finish rendering
+1. Finish rendering code to load .obj files and work with renderables system
 
 ## Build
 ```bash
