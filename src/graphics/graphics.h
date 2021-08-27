@@ -1,7 +1,12 @@
 #pragma once
 
+#if defined(_WIN32)
+#  define VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+#elif defined(__APPLE__)
+#  define VK_USE_PLATFORM_MACOS_MVK
+#endif
+
 #define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#define VK_USE_PLATFORM_WIN32_KHR
 #define VULKAN_HPP_NO_EXCEPTIONS
 
 #include <vector>

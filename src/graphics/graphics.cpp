@@ -200,12 +200,14 @@ namespace Graphics {
 
         std::vector<const char *> activeInstanceExtensions{requiredInstanceExtensions};
 
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         activeInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     #endif
 
     #ifdef VK_USE_PLATFORM_WIN32_KHR
         activeInstanceExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+    #elif defined(VK_USE_PLATFORM_MACOS_MVK)
+        activeInstanceExtensions.push_back(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
     #else
     #       pragma error Platform not supported
     #endif
@@ -340,10 +342,23 @@ namespace Graphics {
 
     void Engine::InitLogicalDevice(const std::vector<const char *> &requiredDeviceExtensions) {
         vk::Result result;
+        std::vector<const char *> extensions(requiredDeviceExtensions);
+        std::vector<vk::ExtensionProperties> supportedExtensions;
+        std::tie(result, supportedExtensions) = _physicalDevice.enumerateDeviceExtensionProperties();
 
-        std::vector<vk::ExtensionProperties> deviceExtensions;
-        std::tie(result, deviceExtensions) = _physicalDevice.enumerateDeviceExtensionProperties();
-        assert(AreRequiredExtensionsPresent(requiredDeviceExtensions, deviceExtensions));
+        assert(AreRequiredExtensionsPresent(extensions, supportedExtensions));
+
+        // Portability support. If portability subset is found in device extensions,
+        // it must be enabled in required extensions.
+        if (std::find_if(
+            supportedExtensions.begin(), 
+            supportedExtensions.end(),
+            [](auto &extension) { 
+                return strcmp(extension.extensionName, "VK_KHR_portability_subset") == 0; 
+            }
+        ) != supportedExtensions.end()) {
+            extensions.push_back("VK_KHR_portability_subset");
+        };
 
         float queuePriority = 1.0f;
 
@@ -358,12 +373,11 @@ namespace Graphics {
             {}, // Flags
             queueCreateInfo,
             {},
-            requiredDeviceExtensions
+            extensions
         };
 
-        vk::Result rCreateDevice;
-        std::tie(rCreateDevice, _device) = _physicalDevice.createDevice(deviceCreateInfo);
-        VK_CHECK(rCreateDevice);
+        std::tie(result, _device) = _physicalDevice.createDevice(deviceCreateInfo);
+        VK_CHECK(result);
 
         _queue = _device.getQueue(_graphicsQueueIndex, 0);
     }
@@ -496,12 +510,6 @@ namespace Graphics {
         viewCreateInfo.subresourceRange.levelCount = 1;
         viewCreateInfo.subresourceRange.layerCount = 1;
         viewCreateInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        viewCreateInfo.components = {
-            vk::ComponentSwizzle::eR,
-            vk::ComponentSwizzle::eG,
-            vk::ComponentSwizzle::eB,
-            vk::ComponentSwizzle::eA,
-        };
 
         for(size_t i = 0; i < imageCount; i++) {
             viewCreateInfo.image = swapchainImages[i];

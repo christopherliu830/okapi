@@ -7,11 +7,11 @@ enable_testing()
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+set(STAGING_DIR ${PROJECT_SOURCE_DIR}/staging)
 
 find_package(SDL2 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(glm CONFIG REQUIRED)
-find_package(EnTT CONFIG REQUIRED)
 
 #spdlog dependency
 include(ExternalProject)
@@ -34,6 +34,7 @@ add_executable(${PROJECT_NAME}
 
 add_subdirectory(lib/VulkanMemoryAllocator)
 add_subdirectory(src/graphics)
+add_subdirectory(lib/entt)
 
 add_dependencies(${PROJECT_NAME} spdlog)
 
@@ -52,7 +53,6 @@ file(GLOB_RECURSE ASSETS RELATIVE_PATH
   "${PROJECT_SOURCE_DIR}/assets"
   "${PROJECT_SOURCE_DIR}/assets/Sprite-0001.png"
 )
-
 
 # link to build
 add_custom_command(
