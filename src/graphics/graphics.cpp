@@ -6,6 +6,8 @@
 #include <set>
 #include <SDL2/SDL_vulkan.h>
 #include "vk_mem_alloc.h"
+#include "types.h"
+#include "mesh.h"
 
 #if ( VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1 )
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -94,6 +96,12 @@ namespace Graphics {
 
     void Engine::CloseVulkan() {
         VK_CHECK(_device.waitIdle());
+
+        _mesh.Destroy(_allocator);
+
+        if (_allocator) {
+            vmaDestroyAllocator(_allocator);
+        }
 
         TeardownFramebuffers();
         for(auto &perframe: _perframes) {
@@ -186,6 +194,37 @@ namespace Graphics {
         InitRenderPass();
         InitPipeline();
         InitFramebuffers();
+        InitAllocator();
+
+        _mesh.vertices.resize(3);
+        _mesh.vertices[0].position = { 1.f, 1.f, 0.0f };
+        _mesh.vertices[1].position = {-1.f, 1.f, 0.0f };
+        _mesh.vertices[2].position = { 0.f,-1.f, 0.0f };
+        _mesh.vertices[0].color = { 0.f, 1.f, 1.f };
+        _mesh.vertices[1].color = { 0.f, 1.f, 1.f };
+        _mesh.vertices[2].color = { 0.f, 1.f, 1.f };
+
+        VkBufferCreateInfo bufferCreateInfo{};
+        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferCreateInfo.size = _mesh.vertices.size() * sizeof(Vertex);
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+        VmaAllocationCreateInfo vmaAllocInfo{};
+        vmaAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+
+        VK_CHECK(vmaCreateBuffer(
+            _allocator,
+            &bufferCreateInfo,
+            &vmaAllocInfo,
+            &_mesh.vertexBuffer.buffer,
+            &_mesh.vertexBuffer.allocation,
+            nullptr
+        ));
+        
+        void *data;
+        vmaMapMemory(_allocator, _mesh.vertexBuffer.allocation, &data);
+        memcpy(data, _mesh.vertices.data(), _mesh.vertices.size() * sizeof(Vertex));
+        vmaUnmapMemory(_allocator, _mesh.vertexBuffer.allocation);
     }
 
     void Engine::InitVkInstance(
@@ -609,7 +648,6 @@ namespace Graphics {
         perframe.queueIndex = -1;
     }
 
-
     void Engine::InitPipeline() {
         vk::Result result;
 
@@ -617,13 +655,20 @@ namespace Graphics {
         std::tie(result, _pipelineLayout) = _device.createPipelineLayout({});
         VK_CHECK(result);
 
-        vk::PipelineVertexInputStateCreateInfo vertexInput{};
+        VertexInputDescription vertexInputDescription = Vertex::GetInputDescription();
+        vk::PipelineVertexInputStateCreateInfo vertexInput{
+            {},
+            1,
+            vertexInputDescription.bindings.data(),
+            3,
+            vertexInputDescription.attributes.data()
+        };
 
         // Specify use triangle lists
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly{{}, vk::PrimitiveTopology::eTriangleList};
 
         vk::PipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         rasterizer.frontFace = vk::FrontFace::eClockwise;
         rasterizer.lineWidth = 1.0f;
 
@@ -797,8 +842,11 @@ namespace Graphics {
                 cmd.setViewport(0, vp);
                 vk::Rect2D scissor{{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
                 cmd.setScissor(0, scissor);
-                cmd.draw(3, 1, 0, 0);
+                vk::DeviceSize offset = 0;
+                vkCmdBindVertexBuffers(cmd, 0, 1, &_mesh.vertexBuffer.buffer, &offset);
+                cmd.draw(_mesh.vertices.size(), 1, 0, 0);
                 cmd.endRenderPass();
+
                 VK_CHECK(cmd.end());
 
                 if (!_perframes[index].swapchainReleaseSemaphore) {
@@ -912,7 +960,6 @@ namespace Graphics {
     void Engine::WaitIdle() {
         vkDeviceWaitIdle(_device);
     }
-
 
     void Engine::TeardownFramebuffers() {
         VK_CHECK(_queue.waitIdle());

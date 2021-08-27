@@ -48,19 +48,13 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${STAGING_DIR}/include) # spdl
 target_link_libraries(${PROJECT_NAME} PRIVATE VulkanMemoryAllocator)
 include(CPack)
 
-
-file(GLOB_RECURSE ASSETS RELATIVE_PATH
-  "${PROJECT_SOURCE_DIR}/assets"
-  "${PROJECT_SOURCE_DIR}/assets/Sprite-0001.png"
-)
-
 # link to build
 add_custom_command(
-  TARGET ${PROJECT_NAME} POST_BUILD
+  TARGET shockwave POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${PROJECT_SOURCE_DIR}/assets"
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
-  COMMENT "Copying assets from ${PROJECT_SOURCE_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>"
+  COMMENT "Copying assets..."
 )
 
 string(LENGTH "${CMAKE_SOURCE_DIR}/" ROOT_PATH_SIZE)

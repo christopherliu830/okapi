@@ -14,6 +14,7 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan.hpp>
 #include "vk_mem_alloc.h"
+#include "mesh.h"
 
 // I don't remember what this layer does
 const std::vector<const char*> gValidationLayers = {
@@ -71,13 +72,13 @@ namespace Graphics {
         vk::RenderPass _renderPass;
         vk::PipelineLayout _pipelineLayout;
         vk::Pipeline _pipeline;
-        VmaAllocator _allocator;
         std::vector<Perframe> _perframes;
         std::vector<vk::ImageView> _swapchainImageViews;
         std::vector<vk::Framebuffer> _swapchainFramebuffers;
         std::vector<vk::Semaphore> _recycledSemaphores;
-        std::vector<VkSemaphore> imageAvailable;
-        std::vector<VkSemaphore> renderFinished;
+        VmaAllocator _allocator;
+
+        Mesh _mesh;
         size_t currentFrame = 0;
 
 

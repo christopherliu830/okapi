@@ -2,7 +2,10 @@
 target_sources(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/graphics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/graphics.h
+
   ${CMAKE_CURRENT_SOURCE_DIR}/types.h
+
+  ${CMAKE_CURRENT_SOURCE_DIR}/mesh.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/mesh.h
 )
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
