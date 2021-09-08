@@ -1,10 +1,10 @@
 #pragma once
 
 #include "types.h"
+#include "vulkan.h"
 #include <vector>
 #include <glm/vec3.hpp>
-#include "vulkan/vulkan.hpp"
-#include "vk_mem_alloc.h"
+#include <glm/mat4x4.hpp>
 
 namespace Graphics {
 
@@ -18,39 +18,31 @@ namespace Graphics {
         glm::vec3 position;
         glm::vec3 normal;
         glm::vec3 color;
+        glm::vec3 GetColor();
         static VertexInputDescription GetInputDescription();
     };
 
-    struct Mesh {
-        std::vector<Vertex> vertices;
+    class Mesh {
+
+    public:
         AllocatedBuffer vertexBuffer;
-        VmaAllocator allocator;
-
+        std::vector<Vertex> vertices;
         Mesh() {}
-        Mesh(const std::vector<Vertex> &&v): vertices{std::move(v)} { }
 
-        void Destroy(VmaAllocator allocator) {
-            vmaDestroyBuffer(
-                allocator,
-                vertexBuffer.buffer,
-                vertexBuffer.allocation
-            );
-            vertices.clear();
-        }
+        void Destroy();
+        static std::pair<bool, Mesh> FromObj(const char* path, vma::Allocator allocator);
 
-        // Copy the vertex buffer's data into GPU readable data.
-        vk::Result Map(VmaAllocator allocator) {
-            void * data;
-            vk::Result result = (vk::Result)vmaMapMemory(allocator, vertexBuffer.allocation, &data);
-            if (result != vk::Result::eSuccess) return (vk::Result)result;
-            auto p = (float*)vertices.data();
-            memcpy(data, vertices.data(), GetVertexBufferSize());
-            vmaUnmapMemory(allocator, vertexBuffer.allocation);
-            return result;
-        }
-
-        uint32_t GetVertexBufferSize() {
+        size_t GetVertexBufferSize() {
             return vertices.size() * sizeof(Vertex);
         }
+
+    private:
+        vk::Result Allocate();
+        vma::Allocator _allocator;
     };
-};
+
+    struct MeshPushConstants {
+        glm::vec4 data;
+        glm::mat4 renderMatrix;
+    };
+}

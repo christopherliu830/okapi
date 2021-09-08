@@ -1,2 +1,5 @@
 /build
 /staging
+
+# Ignore shader build files
+*.spv

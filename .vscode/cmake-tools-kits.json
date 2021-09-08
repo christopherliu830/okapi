@@ -1,0 +1,50 @@
+[
+  {
+    "name": "GCC 10.3.0 x86_64-w64-mingw32",
+    "compilers": {
+      "C": "C:\\msys64\\mingw64\\bin\\x86_64-w64-mingw32-gcc.exe",
+      "CXX": "C:\\msys64\\mingw64\\bin\\x86_64-w64-mingw32-g++.exe"
+    }
+  },
+  {
+    "name": "Visual Studio Community 2019 Release - amd64",
+    "visualStudio": "19504cc0",
+    "visualStudioArchitecture": "x64",
+    "preferredGenerator": {
+      "name": "Visual Studio 16 2019",
+      "platform": "x64",
+      "toolset": "host=x64"
+    }
+  },
+  {
+    "name": "Visual Studio Community 2019 Release - amd64_x86",
+    "visualStudio": "19504cc0",
+    "visualStudioArchitecture": "x64",
+    "preferredGenerator": {
+      "name": "Visual Studio 16 2019",
+      "platform": "win32",
+      "toolset": "host=x64"
+    }
+  },
+  {
+    "name": "Visual Studio Community 2019 Release - x86",
+    "visualStudio": "19504cc0",
+    "visualStudioArchitecture": "x86",
+    "preferredGenerator": {
+      "name": "Visual Studio 16 2019",
+      "platform": "win32",
+      "toolset": "host=x86"
+    }
+  },
+  {
+    "name": "Visual Studio Community 2019 Release - x86_amd64",
+    "visualStudio": "19504cc0",
+    "visualStudioArchitecture": "x86",
+    "preferredGenerator": {
+      "name": "Visual Studio 16 2019",
+      "platform": "x64",
+      "toolset": "host=x86"
+    },
+    "toolchainFile": "C:\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
+  }
+]

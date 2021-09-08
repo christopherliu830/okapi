@@ -1,92 +1,26 @@
+#define VMA_IMPLEMENTATION
+
 #include "graphics.h"
 #include "util.h"
 #include "logging.h"
+#include "types.h"
+#include "mesh.h"
+#include "vma.h"
+#include "pipeline.h"
+#include "renderable.h"
 #include <vector>
 #include <iostream>
 #include <set>
 #include <SDL2/SDL_vulkan.h>
-#include "vk_mem_alloc.h"
-#include "types.h"
-#include "mesh.h"
+#include <glm/glm.hpp>
+#include <glm/gtx/transform.hpp>
 
 #if ( VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1 )
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
 namespace Graphics {
-    // https://github.com/KhronosGroup/Vulkan-Hpp/blob/master/samples/utils/utils.cpp
-    VkBool32 DebugUtilsMessengerCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT       messageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT              messageTypes,
-        VkDebugUtilsMessengerCallbackDataEXT const * pCallbackData,
-    void * /*pUserData*/ ) {
-    #ifndef NDEBUG
-        if ( pCallbackData->messageIdNumber == 648835635 )
-        {
-            // UNASSIGNED-khronos-Validation-debug-build-warning-message
-            return VK_FALSE;
-        }
-        if ( pCallbackData->messageIdNumber == 767975156 )
-        {
-            // UNASSIGNED-BestPractices-vkCreateInstance-specialuse-extension
-            return VK_FALSE;
-        }
-    #endif
-
-        std::cerr << vk::to_string( static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>( messageSeverity ) ) << ": "
-                    << vk::to_string( static_cast<vk::DebugUtilsMessageTypeFlagsEXT>( messageTypes ) ) << ":\n";
-        std::cerr << "\t"
-                    << "messageIDName   = <" << pCallbackData->pMessageIdName << ">\n";
-        std::cerr << "\t"
-                    << "messageIdNumber = " << pCallbackData->messageIdNumber << "\n";
-        std::cerr << "\t"
-                    << "message         = <" << pCallbackData->pMessage << ">\n";
-        if ( 0 < pCallbackData->queueLabelCount )
-        {
-            std::cerr << "\t"
-                    << "Queue Labels:\n";
-            for ( uint8_t i = 0; i < pCallbackData->queueLabelCount; i++ )
-            {
-            std::cerr << "\t\t"
-                        << "labelName = <" << pCallbackData->pQueueLabels[i].pLabelName << ">\n";
-            }
-        }
-        if ( 0 < pCallbackData->cmdBufLabelCount )
-        {
-            std::cerr << "\t"
-                    << "CommandBuffer Labels:\n";
-            for ( uint8_t i = 0; i < pCallbackData->cmdBufLabelCount; i++ )
-            {
-            std::cerr << "\t\t"
-                        << "labelName = <" << pCallbackData->pCmdBufLabels[i].pLabelName << ">\n";
-            }
-        }
-        if ( 0 < pCallbackData->objectCount )
-        {
-            std::cerr << "\t"
-                    << "Objects:\n";
-            for ( uint8_t i = 0; i < pCallbackData->objectCount; i++ )
-            {
-            std::cerr << "\t\t"
-                        << "Object " << i << "\n";
-            std::cerr << "\t\t\t"
-                        << "objectType   = "
-                        << vk::to_string( static_cast<vk::ObjectType>( pCallbackData->pObjects[i].objectType ) ) << "\n";
-            std::cerr << "\t\t\t"
-                        << "objectHandle = " << pCallbackData->pObjects[i].objectHandle << "\n";
-            if ( pCallbackData->pObjects[i].pObjectName )
-            {
-                std::cerr << "\t\t\t"
-                        << "objectName   = <" << pCallbackData->pObjects[i].pObjectName << ">\n";
-            }
-            }
-        }
-        return VK_TRUE;
-    }
-
-    Engine::Engine() {
-        Init();
-    }
+    Engine::Engine() { Init(); }
 
     Engine::~Engine() {
         CloseVulkan();
@@ -97,8 +31,11 @@ namespace Graphics {
     void Engine::CloseVulkan() {
         VK_CHECK(_device.waitIdle());
 
-        _mesh.Destroy(_allocator);
+        for(auto &mesh : _meshes) {
+            mesh.second.Destroy();
+        }
 
+        _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
         if (_allocator) {
             vmaDestroyAllocator(_allocator);
         }
@@ -125,6 +62,8 @@ namespace Graphics {
         if (_renderPass) {
             _device.destroyRenderPass(_renderPass);
         }
+
+        _device.destroyImageView(_depthImageView);
 
         for(auto imageView : _swapchainImageViews) {
             _device.destroyImageView(imageView);
@@ -190,41 +129,11 @@ namespace Graphics {
 
         InitPhysicalDeviceAndSurface();
         InitLogicalDevice({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
+        InitAllocator();
         InitSwapchain();
         InitRenderPass();
         InitPipeline();
         InitFramebuffers();
-        InitAllocator();
-
-        _mesh.vertices.resize(3);
-        _mesh.vertices[0].position = { 1.f, 1.f, 0.0f };
-        _mesh.vertices[1].position = {-1.f, 1.f, 0.0f };
-        _mesh.vertices[2].position = { 0.f,-1.f, 0.0f };
-        _mesh.vertices[0].color = { 0.f, 1.f, 1.f };
-        _mesh.vertices[1].color = { 0.f, 1.f, 1.f };
-        _mesh.vertices[2].color = { 0.f, 1.f, 1.f };
-
-        VkBufferCreateInfo bufferCreateInfo{};
-        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferCreateInfo.size = _mesh.vertices.size() * sizeof(Vertex);
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-
-        VmaAllocationCreateInfo vmaAllocInfo{};
-        vmaAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-
-        VK_CHECK(vmaCreateBuffer(
-            _allocator,
-            &bufferCreateInfo,
-            &vmaAllocInfo,
-            &_mesh.vertexBuffer.buffer,
-            &_mesh.vertexBuffer.allocation,
-            nullptr
-        ));
-        
-        void *data;
-        vmaMapMemory(_allocator, _mesh.vertexBuffer.allocation, &data);
-        memcpy(data, _mesh.vertices.data(), _mesh.vertices.size() * sizeof(Vertex));
-        vmaUnmapMemory(_allocator, _mesh.vertexBuffer.allocation);
     }
 
     void Engine::InitVkInstance(
@@ -237,7 +146,7 @@ namespace Graphics {
         auto [rEnumerateInstance, instanceExtensions] = vk::enumerateInstanceExtensionProperties(); 
         VK_CHECK(rEnumerateInstance);
 
-        std::vector<const char *> activeInstanceExtensions{requiredInstanceExtensions};
+        std::vector<const char *> activeInstanceExtensions {requiredInstanceExtensions};
 
     #ifndef NDEBUG
         activeInstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -248,7 +157,7 @@ namespace Graphics {
     #elif defined(VK_USE_PLATFORM_MACOS_MVK)
         activeInstanceExtensions.push_back(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
     #else
-    #       pragma error Platform not supported
+        assert(0);
     #endif
 
         assert(AreRequiredExtensionsPresent(activeInstanceExtensions, instanceExtensions));
@@ -300,50 +209,6 @@ namespace Graphics {
         };
     }
 
-    /**
-     * @brief Validates a list of required layers, comparing it with the available ones.
-     *
-     * @param required A vector containing required layer names.
-     * @param available A VkLayerProperties object containing available layers.
-     * @return true if all required extensions are available
-     * @return false otherwise
-     */
-    bool Engine::AreRequiredExtensionsPresent(
-        std::vector<const char *> required,
-        std::vector<vk::ExtensionProperties> &available
-    ) {
-
-        for(auto extension : required) {
-            bool extensionFound = false;
-            for (const auto& availableExtension : available) {
-                if (strcmp(extension, availableExtension.extensionName) == 0) {
-                    extensionFound = true;
-                    break;
-                }
-            }
-            if (!extensionFound) return false;
-        }
-        return true;
-    }
-
-    bool Engine::AreRequiredValidationLayersPresent(
-        std::vector<const char *> required,
-        std::vector<vk::LayerProperties> &available
-    ) {
-
-        for(auto layer : required) {
-            bool layerFound = false;
-            for (const auto& availableLayer : available) {
-                std::cout << availableLayer.layerName << std::endl;
-                if (strcmp(layer, availableLayer.layerName) == 0) {
-                    layerFound = true;
-                    break;
-                }
-            }
-            if (!layerFound) return false;
-        }
-        return true;
-    }
 
     void Engine::InitPhysicalDeviceAndSurface() {
         vk::Result result;
@@ -488,7 +353,7 @@ namespace Graphics {
         }
 
         vk::SwapchainKHR oldSwapchain = _swapchain;
-        vk::SwapchainCreateInfoKHR swapchainCreateInfo{
+        vk::SwapchainCreateInfoKHR swapchainCreateInfo {
             {}, // Flags
             _surface,
             swapchainImageCount,
@@ -509,6 +374,7 @@ namespace Graphics {
         std::tie(result, _swapchain) = _device.createSwapchainKHR(swapchainCreateInfo);
         VK_CHECK(result);
 
+        // Tear down old swapchain
         if (oldSwapchain) {
             for (vk::ImageView imageView : _swapchainImageViews)
             {
@@ -539,8 +405,8 @@ namespace Graphics {
         _perframes.clear();
         _perframes.resize(imageCount);
 
-        for(size_t i = 0; i < imageCount; i++) {
-            InitPerframe(_perframes[i]);
+        for(uint32_t i = 0; i < static_cast<uint32_t>(imageCount); i++) {
+            InitPerframe(_perframes[i], i);
         }
 
         vk::ImageViewCreateInfo viewCreateInfo = {};
@@ -549,6 +415,38 @@ namespace Graphics {
         viewCreateInfo.subresourceRange.levelCount = 1;
         viewCreateInfo.subresourceRange.layerCount = 1;
         viewCreateInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+
+        // Allocate the depth image
+        _depthFormat = vk::Format::eD32Sfloat;
+        vk::ImageCreateInfo depthBuffer {};
+        vk::Extent3D extent = { _swapchainDimensions.width, _swapchainDimensions.height, 1 };
+        depthBuffer.imageType = vk::ImageType::e2D;
+        depthBuffer.format = _depthFormat;
+        depthBuffer.extent = extent;
+        depthBuffer.mipLevels = 1;
+        depthBuffer.arrayLayers = 1;
+        depthBuffer.samples = vk::SampleCountFlagBits::e1,
+        depthBuffer.tiling = vk::ImageTiling::eOptimal;
+        depthBuffer.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+        vma::AllocationCreateInfo depthAllocInfo {{}, vma::MemoryUsage::eGpuOnly, vk::MemoryPropertyFlagBits::eDeviceLocal};
+        std::pair<vk::Image, vma::Allocation> imageAlloc;
+        std::tie(result, imageAlloc) = _allocator.createImage(depthBuffer, depthAllocInfo);
+        VK_CHECK(result);
+        _depthImage.image = imageAlloc.first;
+        _depthImage.allocation = imageAlloc.second;
+
+        vk::ImageViewCreateInfo depthViewInfo {};
+        depthViewInfo.image = _depthImage.image;
+        depthViewInfo.viewType = vk::ImageViewType::e2D;
+        depthViewInfo.format = _depthFormat;
+        depthViewInfo.subresourceRange.baseMipLevel = 0;
+        depthViewInfo.subresourceRange.levelCount = 1;
+        depthViewInfo.subresourceRange.layerCount = 0;
+        depthViewInfo.subresourceRange.layerCount = 1;
+        depthViewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+
+        std::tie(result, _depthImageView) = _device.createImageView(depthViewInfo);
+        VK_CHECK(result);
 
         for(size_t i = 0; i < imageCount; i++) {
             viewCreateInfo.image = swapchainImages[i];
@@ -593,7 +491,7 @@ namespace Graphics {
         }
     }
 
-    void Engine::InitPerframe(Perframe &perframe) {
+    void Engine::InitPerframe(Perframe &perframe, uint32_t index) {
         vk::Result result;
         std::tie(result, perframe.queueSubmitFence) = _device.createFence({vk::FenceCreateFlagBits::eSignaled});
         assert(result == vk::Result::eSuccess);
@@ -620,6 +518,7 @@ namespace Graphics {
 
         perframe.device = _device;
         perframe.queueIndex = _graphicsQueueIndex;
+        perframe.imageIndex = index;
     }
 
     void Engine::TeardownPerframe(Perframe &perframe) {
@@ -646,34 +545,44 @@ namespace Graphics {
 
         perframe.device = nullptr;
         perframe.queueIndex = -1;
+        perframe.imageIndex = -1;
     }
 
     void Engine::InitPipeline() {
         vk::Result result;
+        PipelineBuilder builder;
 
-        // Create a blank pipeline layout.
-        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({});
+        // Create push constant accesible only to vertex shader
+        vk::PushConstantRange pushConstant {vk::ShaderStageFlagBits::eVertex, 0, sizeof(MeshPushConstants)};
+
+        // Create a pipeline layout with 1 push constant.
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo {{}, {}, pushConstant};
+        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, {}, pushConstant});
         VK_CHECK(result);
 
+        builder.SetPipelineLayout(_pipelineLayout);
+
         VertexInputDescription vertexInputDescription = Vertex::GetInputDescription();
-        vk::PipelineVertexInputStateCreateInfo vertexInput{
-            {},
-            1,
+
+        builder.SetVertexInput({{},
+            static_cast<uint32_t>(vertexInputDescription.bindings.size()),
             vertexInputDescription.bindings.data(),
-            3,
+            static_cast<uint32_t>(vertexInputDescription.attributes.size()),
             vertexInputDescription.attributes.data()
-        };
+        });
 
         // Specify use triangle lists
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{{}, vk::PrimitiveTopology::eTriangleList};
+        builder.SetInputAssembly({{}, vk::PrimitiveTopology::eTriangleList});
 
-        vk::PipelineRasterizationStateCreateInfo rasterizer{};
+        vk::PipelineRasterizationStateCreateInfo rasterizer {};
         rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         rasterizer.frontFace = vk::FrontFace::eClockwise;
         rasterizer.lineWidth = 1.0f;
+        rasterizer.depthBiasEnable = VK_FALSE;
+        builder.SetRasterizer(rasterizer);
 
         // enable color blending.
-        vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment {};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | 
                                             vk::ColorComponentFlagBits::eG | 
                                             vk::ColorComponentFlagBits::eB | 
@@ -685,54 +594,40 @@ namespace Graphics {
         colorBlendAttachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
         colorBlendAttachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
         colorBlendAttachment.alphaBlendOp = vk::BlendOp::eAdd;
+        builder.SetColorBlendState({{}, {}, {}, colorBlendAttachment});
 
-        vk::PipelineColorBlendStateCreateInfo blend{{}, {}, {}, colorBlendAttachment};
+        vk::PipelineDepthStencilStateCreateInfo depthStencil {};
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
+        depthStencil.depthBoundsTestEnable = VK_FALSE;
+        depthStencil.minDepthBounds = 0.0f;
+        depthStencil.maxDepthBounds = 1.0f;
+        depthStencil.stencilTestEnable = VK_FALSE;
+        builder.SetDepthStencil(depthStencil);
 
-        // We have one viewport.
-        vk::PipelineViewportStateCreateInfo viewport;
-        viewport.viewportCount = 1;
-        viewport.scissorCount = 1;
-
-        // Disable depth testing.
-        vk::PipelineDepthStencilStateCreateInfo depthStencil;
-
-        // No multisampling.
-        vk::PipelineMultisampleStateCreateInfo multisample({}, vk::SampleCountFlagBits::e1);
+        // We have one viewport and one scissor.
+        builder.SetViewport({{}, 1, {}, 1, {}});
+        builder.SetMultisample({{}, vk::SampleCountFlagBits::e1});
 
         // Specify that these states will be dynamic, i.e. not part of pipeline state object.
-        std::array<vk::DynamicState, 2> dynamics{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        vk::PipelineDynamicStateCreateInfo dynamic({}, dynamics);
+        std::array<vk::DynamicState, 2> dynamics {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+        builder.SetDynamicState({ {}, dynamics });
+
+        vk::ShaderModule vertShader = LoadShaderModule("assets/shaders/vert.spv");
+        vk::ShaderModule fragShader = LoadShaderModule("assets/shaders/frag.spv");
+        builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eVertex, vertShader, "main"});
+        builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eFragment, fragShader, "main"});
 
 
-        std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{
-            vk::PipelineShaderStageCreateInfo{
-                {}, vk::ShaderStageFlagBits::eVertex, LoadShaderModule("assets/shaders/vert.spv"), "main"
-            },
-            vk::PipelineShaderStageCreateInfo{
-                {}, vk::ShaderStageFlagBits::eFragment, LoadShaderModule("assets/shaders/frag.spv"), "main"
-            },
-        };
-
-        vk::GraphicsPipelineCreateInfo pipe{{}, shaderStages};
-        pipe.pVertexInputState   = &vertexInput;
-        pipe.pInputAssemblyState = &inputAssembly;
-        pipe.pRasterizationState = &rasterizer;
-        pipe.pColorBlendState    = &blend;
-        pipe.pMultisampleState   = &multisample;
-        pipe.pViewportState      = &viewport;
-        pipe.pDepthStencilState  = &depthStencil;
-        pipe.pDynamicState       = &dynamic;
-
-        // We need to specify the pipeline layout and the render pass description up front as well.
-        pipe.renderPass = _renderPass;
-        pipe.layout     = _pipelineLayout;
-
-        std::tie(result, _pipeline) = _device.createGraphicsPipeline(nullptr, pipe);
+        std::tie(result, _pipeline) = builder.Build(_device, _renderPass);
         VK_CHECK(result);
 
-        // Modules loaded, ok to destroy.
-        _device.destroyShaderModule(shaderStages[0].module);
-        _device.destroyShaderModule(shaderStages[1].module);
+        _device.destroyShaderModule(vertShader);
+        _device.destroyShaderModule(fragShader);
+        builder.FlushShaderModules();
+
+        CreateMaterial(_pipeline, _pipelineLayout, "defaultMesh");
     }
 
     void Engine::InitRenderPass() {
@@ -757,14 +652,31 @@ namespace Graphics {
 
         // One subpass, this subpass has one color attachment.
         // While executing this subpass, the attachment will be in attachment optimal layout.
-        vk::AttachmentReference colorRef{0, vk::ImageLayout::eColorAttachmentOptimal};
+        vk::AttachmentReference colorRef {0, vk::ImageLayout::eColorAttachmentOptimal};
+
+        // Create the depth attachment
+        vk::AttachmentDescription depthAttachment {{}, _depthFormat};
+        depthAttachment.format = _depthFormat;
+        depthAttachment.samples = vk::SampleCountFlagBits::e1;
+        depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+        depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eClear;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare; 
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        vk::AttachmentReference depthRef = {1, vk::ImageLayout::eDepthStencilAttachmentOptimal};
 
         // We will end up with two transitions.
         // The first one happens right before we start subpass #0, where
         // eUndefined is transitioned into eColorAttachmentOptimal.
         // The final layout in the render pass attachment states ePresentSrcKHR, so we
         // will get a final transition from eColorAttachmentOptimal to ePresetSrcKHR.
-        vk::SubpassDescription subpass{{}, vk::PipelineBindPoint::eGraphics, {}, colorRef};
+        vk::SubpassDescription subpass {{}, 
+            vk::PipelineBindPoint::eGraphics, 
+            {},
+            colorRef,
+            {},
+            &depthRef
+        };
 
         // Create a dependency to external events.
         // We need to wait for the WSI semaphore to signal.
@@ -781,7 +693,8 @@ namespace Graphics {
         dependency.srcAccessMask = {};
         dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
 
-        vk::RenderPassCreateInfo renderPassCreateInfo{{}, colorAttachment, subpass, dependency};
+        std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+        vk::RenderPassCreateInfo renderPassCreateInfo {{}, attachments, subpass, dependency};
 
         vk::Result result;
         std::tie(result, _renderPass) = _device.createRenderPass(renderPassCreateInfo);
@@ -791,10 +704,11 @@ namespace Graphics {
     void Engine::InitFramebuffers() {
 
         for (auto &imageView : _swapchainImageViews) {
-            vk::FramebufferCreateInfo fbInfo{
+            std::array<vk::ImageView, 2> attachments = {imageView, _depthImageView};
+            vk::FramebufferCreateInfo fbInfo {
                 {},
                 _renderPass,
-                imageView,
+                attachments,
                 _swapchainDimensions.width,
                 _swapchainDimensions.height,
                 1
@@ -806,70 +720,93 @@ namespace Graphics {
     }
 
     void Engine::InitAllocator() {
-        VmaAllocatorCreateInfo vmaInfo{};
-        vmaInfo.physicalDevice = _physicalDevice;
-        vmaInfo.device = _device;
-        vmaInfo.instance = _instance;
-        VK_CHECK(vmaCreateAllocator(&vmaInfo, &_allocator));
+        vma::AllocatorCreateInfo allocatorInfo {
+            {},
+            _physicalDevice,
+            _device
+        };
+
+        allocatorInfo.instance = _instance;
+        vk::Result result;
+        std::tie(result, _allocator) = vma::createAllocator(allocatorInfo);
+        VK_CHECK(result);
     }
 
-    void Engine::Update() {
+    // Returns nullptr if the frame isn't ready yet
+    Engine::Perframe* Engine::BeginFrame() {
         uint32_t index;
-
         vk::Result res = AcquireNextImage(&index);
 
         switch(res) {
             case vk::Result::eSuboptimalKHR:
             case vk::Result::eErrorOutOfDateKHR:
                 Resize(_swapchainDimensions.width, _swapchainDimensions.height);
-                VK_CHECK(_queue.waitIdle());
-                return;
-            case vk::Result::eSuccess: {
-                auto fb = _swapchainFramebuffers[index];
-                auto cmd = _perframes[index].primaryCommandBuffer;
-                vk::CommandBufferBeginInfo beginInfo{vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
-                VK_CHECK(cmd.begin(beginInfo));
-                vk::ClearValue clearValue;
-                clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
-                vk::RenderPassBeginInfo rpBeginInfo{
-                    _renderPass, fb, {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
-                    clearValue
-                };
-
-                cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
-                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, _pipeline);
-                vk::Viewport vp{0.0f, 0.0f, static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height)};
-                cmd.setViewport(0, vp);
-                vk::Rect2D scissor{{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
-                cmd.setScissor(0, scissor);
-                vk::DeviceSize offset = 0;
-                vkCmdBindVertexBuffers(cmd, 0, 1, &_mesh.vertexBuffer.buffer, &offset);
-                cmd.draw(_mesh.vertices.size(), 1, 0, 0);
-                cmd.endRenderPass();
-
-                VK_CHECK(cmd.end());
-
-                if (!_perframes[index].swapchainReleaseSemaphore) {
-                    vk::Result result;
-                    std::tie(result, _perframes[index].swapchainReleaseSemaphore) = _device.createSemaphore({});
-                    VK_CHECK(result);
-                }
-
-                vk::PipelineStageFlags waitStage{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-
-                vk::SubmitInfo info{
-                    _perframes[index].swapchainAcquireSemaphore, waitStage, cmd,
-                    _perframes[index].swapchainReleaseSemaphore
-                };
-
-                VK_CHECK(_queue.submit(info, _perframes[index].queueSubmitFence));
+                return nullptr;
+            case vk::Result::eSuccess:
                 break;
-            } default:
-                VK_CHECK(_queue.waitIdle());
-                return;
+            default:
+                return nullptr;
         }
 
-        res = Present(index);
+        // Begin render pass
+        auto cmd = _perframes[index].primaryCommandBuffer;
+
+        vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+        VK_CHECK(cmd.begin(beginInfo));
+
+        vk::ClearValue clearValue;
+        clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
+
+        vk::ClearValue depthClear;
+        depthClear.depthStencil.depth = 1.f;
+
+        std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
+
+        vk::RenderPassBeginInfo rpBeginInfo {
+            _renderPass, _swapchainFramebuffers[index],
+            {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
+            clearValues
+        };
+
+        cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
+
+        vk::Viewport vp {
+            0.0f, 0.0f, 
+            static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
+            0.0f, 0.1f
+        };
+        cmd.setViewport(0, vp);
+
+        vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
+        cmd.setScissor(0, scissor);
+
+        return &_perframes[index];
+    }
+
+    void Engine::EndFrame(Engine::Perframe* perframe) {
+        auto cmd = perframe->primaryCommandBuffer;
+
+        cmd.endRenderPass();
+
+        VK_CHECK(cmd.end());
+
+        if (!perframe->swapchainReleaseSemaphore) {
+            vk::Result result;
+            std::tie(result, perframe->swapchainReleaseSemaphore) = _device.createSemaphore({});
+            VK_CHECK(result);
+        }
+
+        vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+        vk::SubmitInfo info {
+            perframe->swapchainAcquireSemaphore,
+            waitStage, perframe->primaryCommandBuffer,
+            perframe->swapchainReleaseSemaphore
+        };
+
+        VK_CHECK(_queue.submit(info, perframe->queueSubmitFence));
+
+        vk::Result res = Present(perframe);
 
         // Handle Outdated error in present.
         if (res == vk::Result::eSuboptimalKHR || res == vk::Result::eErrorOutOfDateKHR)
@@ -879,7 +816,10 @@ namespace Graphics {
         else if (res != vk::Result::eSuccess)
         {
             LOGE("Failed to present swapchain image.");
+            VK_CHECK(res);
         }
+
+        _currentFrame++;
     }
 
     vk::Result Engine::AcquireNextImage(uint32_t *image) {
@@ -929,11 +869,67 @@ namespace Graphics {
         return vk::Result::eSuccess;
     }
 
-    vk::Result Engine::Present(uint32_t index) {
-        vk::PresentInfoKHR present{
-            _perframes[index].swapchainReleaseSemaphore, _swapchain, index
+    vk::Result Engine::DrawFrame(uint32_t index, const std::vector<Renderable> &objects) {
+        auto fb = _swapchainFramebuffers[index];
+        auto cmd = _perframes[index].primaryCommandBuffer;
+
+        vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+        VK_CHECK(cmd.begin(beginInfo));
+
+        vk::ClearValue clearValue;
+        clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
+
+        vk::ClearValue depthClear;
+        depthClear.depthStencil.depth = 1.f;
+
+        std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
+
+        vk::RenderPassBeginInfo rpBeginInfo {
+            _renderPass, fb, {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
+            clearValues
         };
-        // Avoid assertion failure on result because we will manually parse the result here
+
+        cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
+
+        vk::Viewport vp {
+            0.0f, 0.0f, 
+            static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
+            0.0f, 0.1f
+        };
+        cmd.setViewport(0, vp);
+
+        vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
+        cmd.setScissor(0, scissor);
+
+        DrawObjects(cmd, objects.data(), objects.size());
+
+        cmd.endRenderPass();
+
+        VK_CHECK(cmd.end());
+
+        if (!_perframes[index].swapchainReleaseSemaphore) {
+            vk::Result result;
+            std::tie(result, _perframes[index].swapchainReleaseSemaphore) = _device.createSemaphore({});
+            VK_CHECK(result);
+        }
+
+        vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+        vk::SubmitInfo info {
+            _perframes[index].swapchainAcquireSemaphore,
+            waitStage, cmd,
+            _perframes[index].swapchainReleaseSemaphore
+        };
+
+        return _queue.submit(info, _perframes[index].queueSubmitFence);
+    }
+
+    vk::Result Engine::Present(Perframe *perframe) {
+        vk::PresentInfoKHR present {
+            perframe->swapchainReleaseSemaphore, _swapchain, perframe->imageIndex
+        };
+        // Avoid assertion failure on result because we want to
+        // bypass assert check on vk::Result::eOutdated and handle manually
         return (vk::Result)vkQueuePresentKHR(_queue, reinterpret_cast<VkPresentInfoKHR *>(&present));
     }
 
@@ -980,4 +976,89 @@ namespace Graphics {
         VK_CHECK(result);
         return mod;
     }
-}
+
+    Material* Engine::CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string& name) {
+        Material mat;
+        mat.pipeline = pipeline;
+        mat.pipelineLayout = layout;
+        _materials[name] = mat;
+        return &_materials[name];
+    }
+
+    Material* Engine::GetMaterial(const std::string& name) {
+        auto it = _materials.find(name);
+        if (it == _materials.end()) {
+            return nullptr;
+        } else {
+            return &(*it).second;
+        }
+    }
+
+    Mesh* Engine::GetMesh(const std::string& name) {
+        auto it = _meshes.find(name);
+        if (it == _meshes.end()) {
+            return nullptr;
+        } else {
+            return &(*it).second;
+        }
+    }
+
+    void Engine::DrawObjects(vk::CommandBuffer cmd, const Renderable* first, size_t count) {
+        glm::vec3 cameraPos {0.f, -6.f, -10.f};
+        glm::mat4 view = glm::translate(glm::mat4{1.f}, cameraPos);
+        glm::mat4 projection = glm::perspective(
+            glm::radians(70.f), 
+            (float)(_swapchainDimensions.width / (float)_swapchainDimensions.height),
+            0.1f,
+            200.f
+        );
+        projection[1][1] *= -1;
+
+        Mesh* lastMesh = nullptr;
+        Material* lastMaterial = nullptr;
+
+        for(size_t i = 0; i < count; i++) {
+            const Renderable& obj = first[i];
+
+            if (obj.material != lastMaterial) {
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, obj.material->pipeline);
+                lastMaterial = obj.material;
+            }
+
+            // MeshPushConstants mvpMatrix;
+            // mvpMatrix.renderMatrix = projection * view * transform.matrix;
+
+            // cmd.pushConstants(
+            //     obj.material->pipelineLayout,
+            //     vk::ShaderStageFlagBits::eVertex,
+            //     0, sizeof(MeshPushConstants), &mvpMatrix
+            // );
+
+            if (obj.mesh != lastMesh) {
+                vk::DeviceSize offset = 0;
+                cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer.buffer, &offset);
+                lastMesh = obj.mesh;
+            }
+
+            cmd.draw(static_cast<uint32_t>(obj.mesh->vertices.size()), 1, 0, 0);
+        }
+    }
+
+    Mesh* Engine::CreateMesh(const std::string &path) {
+        Mesh* pMesh = GetMesh(path);
+        if (pMesh != nullptr) return GetMesh(path);
+
+        auto [result, mesh] = Mesh::FromObj("assets/Monkey/monkey.obj", _allocator);
+        if (!result) return nullptr;
+        _meshes[path] = mesh;
+        return &_meshes[path];
+    }
+
+    std::pair<uint32_t, uint32_t> Engine::GetWindowSize() {
+        return std::pair(_swapchainDimensions.width, _swapchainDimensions.height);
+    }
+
+    uint64_t Engine::GetCurrentFrame() {
+        return _currentFrame;
+    }
+};

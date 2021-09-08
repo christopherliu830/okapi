@@ -4,7 +4,7 @@
 #include <entt/entt.hpp>
 
 class EntitySystem {
-    virtual void update(entt::registry& registry, float deltaTime) = 0;
+    virtual void Update(entt::registry& registry, float deltaTime) = 0;
 };
 
 #endif

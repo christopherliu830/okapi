@@ -1,11 +1,18 @@
 
 target_sources(${PROJECT_NAME} PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/graphics.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/graphics.h
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/types.h
-
-  ${CMAKE_CURRENT_SOURCE_DIR}/mesh.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/mesh.h
+  graphics.cpp
+  graphics.h
+  mesh.cpp
+  mesh.h
+  pipeline.cpp
+  pipeline.h
+  render_system.h
+  render_system.cpp
+  renderable.h
+  types.h
+  util.h
+  vma.h
+  vma.hpp
+  vulkan.h
 )
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

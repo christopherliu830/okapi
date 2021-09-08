@@ -1,14 +1,18 @@
 #pragma once
 
-#include <vk_mem_alloc.h>
-#include <vulkan/vulkan.hpp>
-#include <glm/vec3.hpp>
+#include "vulkan.h"
 
 namespace Graphics {
 
     struct AllocatedBuffer {
-        VkBuffer buffer;
-        VmaAllocation allocation;
+        vk::Buffer buffer;
+        vma::Allocation allocation;
     };
+
+    struct AllocatedImage {
+        vk::Image image;
+        vma::Allocation allocation;
+    };
+
 
 };
