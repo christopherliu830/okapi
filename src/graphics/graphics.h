@@ -27,19 +27,31 @@ const std::vector<const char*> gDeviceExtensions = {
 #define SCREEN_HEIGHT 720
 
 namespace Graphics {
+
+    struct GPUCameraData {
+        glm::mat4 view;
+        glm::mat4 proj;
+        glm::mat4 viewProj;
+    };
+
+    struct Perframe {
+        vk::Device device;
+        vk::Fence queueSubmitFence;
+        vk::CommandPool primaryCommandPool;
+        vk::CommandBuffer primaryCommandBuffer;
+        vk::Semaphore swapchainAcquireSemaphore;
+        vk::Semaphore swapchainReleaseSemaphore;
+
+        // Buffer that holds a GPUCameraData to use when rendering
+        AllocatedBuffer cameraBuffer;
+        std::vector<vk::DescriptorSet> globalDescriptor;
+        uint32_t queueIndex;
+        uint32_t imageIndex;
+    };
+
     class Engine {
 
     public:
-        struct Perframe {
-            vk::Device device;
-            vk::Fence queueSubmitFence;
-            vk::CommandPool primaryCommandPool;
-            vk::CommandBuffer primaryCommandBuffer;
-            vk::Semaphore swapchainAcquireSemaphore;
-            vk::Semaphore swapchainReleaseSemaphore;
-            uint32_t queueIndex;
-            uint32_t imageIndex;
-        };
 
         Engine();
         ~Engine();
@@ -52,6 +64,8 @@ namespace Graphics {
         Mesh* GetMesh(const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
         Material* GetMaterial(const std::string& name);
+        void* MapMemory(vma::Allocation allocation);
+        void UnmapMemory(vma::Allocation allocation);
 
         Perframe* BeginFrame();
         vk::Result DrawFrame(uint32_t index, const std::vector<Renderable> &objects);
@@ -79,6 +93,8 @@ namespace Graphics {
         vk::RenderPass _renderPass;
         vk::PipelineLayout _pipelineLayout;
         vk::Pipeline _pipeline;
+        vk::DescriptorSetLayout _globalSetLayout;
+        vk::DescriptorPool _descriptorPool;
         vma::Allocator _allocator; // AMD Vulkan memory allocator
 
         // Depth Testing 
@@ -109,6 +125,7 @@ namespace Graphics {
         void InitLogicalDevice(const std::vector<const char *> &requiredDeviceExtensions);
         void InitSwapchain();
         void InitPerframe(Perframe &perframe, uint32_t index);
+        void InitDescriptors();
         void InitPipeline();
         void InitRenderPass();
         void InitFramebuffers();
@@ -117,6 +134,7 @@ namespace Graphics {
         void CloseVulkan();
         void TeardownPerframe(Perframe &perframe);
         void TeardownFramebuffers();
+        AllocatedBuffer CreateBuffer(size_t size, vk::BufferUsageFlags flags, vma::MemoryUsage usage);
 
         vk::Result AcquireNextImage(uint32_t *index);
         vk::Result Present(Perframe *perframe);

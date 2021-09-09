@@ -36,9 +36,6 @@ namespace Graphics {
         }
 
         _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
-        if (_allocator) {
-            vmaDestroyAllocator(_allocator);
-        }
 
         TeardownFramebuffers();
         for(auto &perframe: _perframes) {
@@ -46,6 +43,10 @@ namespace Graphics {
         }
 
         _perframes.clear();
+
+        if (_allocator) {
+            _allocator.destroy();
+        }
 
         for(auto semaphore: _recycledSemaphores) {
             _device.destroySemaphore(semaphore);
@@ -61,6 +62,14 @@ namespace Graphics {
 
         if (_renderPass) {
             _device.destroyRenderPass(_renderPass);
+        }
+
+        if (_globalSetLayout) {
+            _device.destroyDescriptorSetLayout(_globalSetLayout);
+        }
+
+        if (_descriptorPool) {
+            _device.destroyDescriptorPool(_descriptorPool);
         }
 
         _device.destroyImageView(_depthImageView);
@@ -132,6 +141,7 @@ namespace Graphics {
         InitAllocator();
         InitSwapchain();
         InitRenderPass();
+        InitDescriptors();
         InitPipeline();
         InitFramebuffers();
     }
@@ -516,12 +526,22 @@ namespace Graphics {
         assert(result == vk::Result::eSuccess);
         perframe.primaryCommandBuffer = cmdBuf.front();
 
+        perframe.cameraBuffer = CreateBuffer(
+            sizeof(GPUCameraData),
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            vma::MemoryUsage::eCpuToGpu
+        );
+
         perframe.device = _device;
         perframe.queueIndex = _graphicsQueueIndex;
         perframe.imageIndex = index;
     }
 
     void Engine::TeardownPerframe(Perframe &perframe) {
+        if (perframe.cameraBuffer.buffer) {
+            _allocator.destroyBuffer(perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
+        }
+
         if (perframe.queueSubmitFence) {
             _device.destroyFence(perframe.queueSubmitFence);
             perframe.queueSubmitFence = nullptr;
@@ -548,6 +568,51 @@ namespace Graphics {
         perframe.imageIndex = -1;
     }
 
+    void Engine::InitDescriptors() {
+        vk::DescriptorSetLayoutBinding camBufferBinding = {
+            0, 
+            vk::DescriptorType::eUniformBuffer,
+            1, // Descriptor count
+            vk::ShaderStageFlagBits::eVertex,
+            nullptr
+        };
+
+        std::array<vk::DescriptorSetLayoutBinding, 1> bindings = { camBufferBinding };
+        vk::DescriptorSetLayoutCreateInfo setInfo = {{}, bindings}; 
+
+        vk::Result result;
+        std::tie(result, _globalSetLayout) = _device.createDescriptorSetLayout(setInfo);
+        VK_CHECK(result);
+
+        std::vector<vk::DescriptorPoolSize> sizes = {
+            { vk::DescriptorType::eUniformBuffer, 10 }
+        };
+
+        vk::DescriptorPoolCreateInfo poolInfo {{}, 10, sizes};
+
+        std::tie(result, _descriptorPool) = _device.createDescriptorPool(poolInfo);
+        VK_CHECK(result);
+
+        for(int i  = 0; i < _perframes.size(); i++) {
+            std::vector<vk::DescriptorSet> descriptorSets;
+
+            // Does not need to be explicitly freed
+            std::tie(result, _perframes[i].globalDescriptor) = _device.allocateDescriptorSets({_descriptorPool, _globalSetLayout});
+            VK_CHECK(result);
+
+            vk::DescriptorBufferInfo bufferInfo {_perframes[i].cameraBuffer.buffer, 0, sizeof(GPUCameraData)};
+
+            _device.updateDescriptorSets({{
+                _perframes[i].globalDescriptor[0],
+                0,
+                0,
+                vk::DescriptorType::eUniformBuffer,
+                nullptr,
+                bufferInfo 
+            }}, {});
+        }
+    }
+
     void Engine::InitPipeline() {
         vk::Result result;
         PipelineBuilder builder;
@@ -555,9 +620,9 @@ namespace Graphics {
         // Create push constant accesible only to vertex shader
         vk::PushConstantRange pushConstant {vk::ShaderStageFlagBits::eVertex, 0, sizeof(MeshPushConstants)};
 
+
         // Create a pipeline layout with 1 push constant.
-        vk::PipelineLayoutCreateInfo pipelineLayoutInfo {{}, {}, pushConstant};
-        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, {}, pushConstant});
+        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, _globalSetLayout, pushConstant});
         VK_CHECK(result);
 
         builder.SetPipelineLayout(_pipelineLayout);
@@ -733,7 +798,7 @@ namespace Graphics {
     }
 
     // Returns nullptr if the frame isn't ready yet
-    Engine::Perframe* Engine::BeginFrame() {
+    Perframe* Engine::BeginFrame() {
         uint32_t index;
         vk::Result res = AcquireNextImage(&index);
 
@@ -783,7 +848,7 @@ namespace Graphics {
         return &_perframes[index];
     }
 
-    void Engine::EndFrame(Engine::Perframe* perframe) {
+    void Engine::EndFrame(Perframe* perframe) {
         auto cmd = perframe->primaryCommandBuffer;
 
         cmd.endRenderPass();
@@ -965,6 +1030,18 @@ namespace Graphics {
         _swapchainFramebuffers.clear();
     }
 
+    AllocatedBuffer Engine::CreateBuffer(size_t size, vk::BufferUsageFlags usage, vma::MemoryUsage memoryUsage) {
+        AllocatedBuffer buffer;
+        auto [result, bufAlloc] = _allocator.createBuffer(
+            {{}, size, usage, vk::SharingMode::eExclusive},
+            {{}, memoryUsage}
+        );
+        VK_CHECK(result);
+        buffer.buffer = bufAlloc.first;
+        buffer.allocation = bufAlloc.second;
+        return buffer;
+    }
+
     vk::ShaderModule Engine::LoadShaderModule(const char *path) {
         auto spirv = ReadFile(path);
         vk::ShaderModuleCreateInfo moduleInfo(
@@ -992,6 +1069,16 @@ namespace Graphics {
         } else {
             return &(*it).second;
         }
+    }
+
+    void* Engine::MapMemory(vma::Allocation allocation) {
+        auto [result, data] = _allocator.mapMemory(allocation);
+        VK_CHECK(result);
+        return data;
+    }
+
+    void Engine::UnmapMemory(vma::Allocation allocation) {
+        _allocator.unmapMemory(allocation);
     }
 
     Mesh* Engine::GetMesh(const std::string& name) {

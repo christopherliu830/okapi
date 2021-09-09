@@ -138,5 +138,4 @@ namespace Graphics {
         }
         return VK_TRUE;
     }
-
 }
