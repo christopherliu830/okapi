@@ -57,35 +57,39 @@ namespace Graphics {
     vk::Result Mesh::Allocate() {
         vk::Result res;
 
-        vk::BufferCreateInfo bufferCreateInfo {{},
+        // vk::BufferCreateInfo bufferCreateInfo {{},
+        //     vertices.size() * sizeof(Vertex),
+        //     vk::BufferUsageFlagBits::eVertexBuffer
+        // };
+        // vma::AllocationCreateInfo allocInfo {{}, vma::MemoryUsage::eCpuToGpu};
+        // auto [result, bufferAlloc] = _allocator.createBuffer(bufferCreateInfo, allocInfo);
+        // VK_CHECK(result);
+        // vertexBuffer->buffer = bufferAlloc.first;
+        // vertexBuffer->allocation = bufferAlloc.second;
+        vertexBuffer = std::make_unique<AllocatedBuffer>(
+            _allocator,
             vertices.size() * sizeof(Vertex),
-            vk::BufferUsageFlagBits::eVertexBuffer
-        };
-        vma::AllocationCreateInfo allocInfo {{}, vma::MemoryUsage::eCpuToGpu};
-        auto [result, bufferAlloc] = _allocator.createBuffer(bufferCreateInfo, allocInfo);
-        VK_CHECK(result);
-        vertexBuffer.buffer = bufferAlloc.first;
-        vertexBuffer.allocation = bufferAlloc.second;
+            vk::BufferUsageFlagBits::eVertexBuffer,
+            vma::MemoryUsage::eCpuToGpu
+        );
+
 
         void *data;
 
-        res = _allocator.mapMemory(vertexBuffer.allocation, &data);
+        res = _allocator.mapMemory(vertexBuffer->allocation, &data);
         if (res != vk::Result::eSuccess) {
-            _allocator.destroyBuffer(vertexBuffer.buffer, vertexBuffer.allocation);
+            _allocator.destroyBuffer(vertexBuffer->buffer, vertexBuffer->allocation);
             return res;
         }
 
         memcpy(data, vertices.data(), GetVertexBufferSize());
-        _allocator.unmapMemory(vertexBuffer.allocation);
+        _allocator.unmapMemory(vertexBuffer->allocation);
         return res;
     }
 
-    void Mesh::Destroy() {
-        _allocator.destroyBuffer(vertexBuffer.buffer, vertexBuffer.allocation);
-        vertices.clear();
-    }
+    void Mesh::Destroy() { }
 
-    std::pair<bool, Mesh> Mesh::FromObj(const char* path, vma::Allocator allocator) {
+    Mesh Mesh::FromObj(const char* path, vma::Allocator allocator) {
 
         tinyobj::ObjReaderConfig config;
         tinyobj::ObjReader reader;
@@ -97,7 +101,7 @@ namespace Graphics {
             if (!reader.Error().empty()) {
                 LOGE(reader.Error());
             }
-            return std::pair(false, m);
+            return m;
         }
 
         if (!reader.Warning().empty()) {
@@ -156,8 +160,9 @@ namespace Graphics {
             }
         }
 
-        if (m.Allocate() != vk::Result::eSuccess) return std::pair(false, m);
+        if (m.Allocate() != vk::Result::eSuccess) return m;
 
-        return std::pair(true, m);
+        return m;
     }
+
 }

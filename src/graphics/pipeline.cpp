@@ -19,6 +19,22 @@ namespace Graphics {
         return device.createGraphicsPipeline(nullptr, pipe);
     }
 
+    vk::ResultValue<vk::UniquePipeline> PipelineBuilder::BuildUnique(vk::Device device, vk::RenderPass renderPass) {
+        vk::GraphicsPipelineCreateInfo pipe {{}, _shaderStages};
+        pipe.pVertexInputState = &_vertexInput;
+        pipe.pInputAssemblyState = &_inputAssembly;
+        pipe.pRasterizationState = &_rasterizer;
+        pipe.pColorBlendState = &_blend;
+        pipe.pMultisampleState = &_multisample;
+        pipe.pViewportState = &_viewport;
+        pipe.pDepthStencilState = &_depthStencil;
+        pipe.pDynamicState = &_dynamic;
+        pipe.renderPass = renderPass;
+        pipe.layout = _layout;
+
+        return device.createGraphicsPipelineUnique(nullptr, pipe);
+    }
+
     PipelineBuilder* PipelineBuilder::SetVertexInput(vk::PipelineVertexInputStateCreateInfo info) {
         _vertexInput = info;
         return this;

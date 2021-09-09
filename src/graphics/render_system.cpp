@@ -29,11 +29,11 @@ namespace Graphics {
         camData.viewProj = projection * viewMatrix;
 
         if (perframe) {
-            void* data = _engine->MapMemory(perframe->cameraBuffer.allocation);
+            void* data = _engine->MapMemory(perframe->cameraBuffer->allocation);
             memcpy(data, &camData, sizeof(GPUCameraData));
-            _engine->UnmapMemory(perframe->cameraBuffer.allocation);
+            _engine->UnmapMemory(perframe->cameraBuffer->allocation);
 
-            vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
+            vk::CommandBuffer cmd = *perframe->primaryCommandBuffer;
 
             Mesh* lastMesh = nullptr;
             Material* lastMaterial = nullptr;
@@ -47,7 +47,7 @@ namespace Graphics {
                     cmd.bindDescriptorSets(
                         vk::PipelineBindPoint::eGraphics,
                         obj.material->pipelineLayout, 0, 
-                        { perframe->globalDescriptor[0] }, {}
+                        { perframe->globalDescriptor.front() }, {}
                     );
                 }
 
@@ -62,7 +62,7 @@ namespace Graphics {
 
                 if (obj.mesh != lastMesh) {
                     vk::DeviceSize offset = 0;
-                    cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer.buffer, &offset);
+                    cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer->buffer, &offset);
                     lastMesh = obj.mesh;
                 }
 

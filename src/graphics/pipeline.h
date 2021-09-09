@@ -10,6 +10,7 @@ namespace Graphics {
         PipelineBuilder();
 
         vk::ResultValue<vk::Pipeline> Build(vk::Device device, vk::RenderPass renderPass);
+        vk::ResultValue<vk::UniquePipeline> BuildUnique(vk::Device device, vk::RenderPass renderPass);
         PipelineBuilder* SetVertexInput(vk::PipelineVertexInputStateCreateInfo info);
         PipelineBuilder* SetRasterizer(vk::PipelineRasterizationStateCreateInfo info);
         PipelineBuilder* SetInputAssembly(vk::PipelineInputAssemblyStateCreateInfo info);

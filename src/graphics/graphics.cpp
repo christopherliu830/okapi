@@ -29,11 +29,13 @@ namespace Graphics {
     }
 
     void Engine::CloseVulkan() {
-        VK_CHECK(_device.waitIdle());
+        VK_CHECK(_device->waitIdle());
 
         for(auto &mesh : _meshes) {
             mesh.second.Destroy();
         }
+
+        _meshes.clear();
 
         _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
 
@@ -48,59 +50,18 @@ namespace Graphics {
             _allocator.destroy();
         }
 
-        for(auto semaphore: _recycledSemaphores) {
-            _device.destroySemaphore(semaphore);
-        }
 
-        if (_pipeline) {
-            _device.destroyPipeline(_pipeline);
-        }
+        // for(auto &semaphore: _recycledSemaphores) {
+        //     _device->destroySemaphore(semaphore);
+        // }
 
-        if (_pipelineLayout) {
-            _device.destroyPipelineLayout(_pipelineLayout);
-        }
+        // if (_pipeline) {
+        //     _device->destroyPipeline(_pipeline);
+        // }
 
-        if (_renderPass) {
-            _device.destroyRenderPass(_renderPass);
-        }
-
-        if (_globalSetLayout) {
-            _device.destroyDescriptorSetLayout(_globalSetLayout);
-        }
-
-        if (_descriptorPool) {
-            _device.destroyDescriptorPool(_descriptorPool);
-        }
-
-        _device.destroyImageView(_depthImageView);
-
-        for(auto imageView : _swapchainImageViews) {
-            _device.destroyImageView(imageView);
-        }
-
-        if (_swapchain) {
-            _device.destroySwapchainKHR(_swapchain);
-            _swapchain = nullptr;
-        }
-
-        if (_surface) {
-            _instance.destroySurfaceKHR(_surface);
-            _surface = nullptr;
-        }
-
-        if (_device) {
-            _device.destroy();
-            _device = nullptr;
-        }
-
-#ifndef NDEBUG
-        if (_debugMessenger) {
-            _instance.destroyDebugUtilsMessengerEXT(_debugMessenger);
-            _debugMessenger = nullptr;
-        }
-#endif
-
-        _instance.destroy();
+        // if (_pipelineLayout) {
+        //     _device->destroyPipelineLayout(_pipelineLayout);
+        // }
     }
 
     void Engine::Init() {
@@ -188,10 +149,10 @@ namespace Graphics {
         instanceCreateInfo.pNext = &debugUtilsCreateInfo;
     #endif
 
-        vk::Result createInstanceResult;
-        std::tie(createInstanceResult, _instance) = vk::createInstance(instanceCreateInfo);
-        VK_CHECK(createInstanceResult);
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(_instance);
+        vk::Result result;
+        std::tie(result, _instance) = vk::createInstanceUnique(instanceCreateInfo).asTuple();
+        VK_CHECK(result);
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(*_instance);
     }
 
     void Engine::CreateDispatcher() {
@@ -204,7 +165,7 @@ namespace Graphics {
     void Engine::CreateDebugUtilsMessenger() {
 #ifndef NDEBUG
         vk::Result result;
-        std::tie(result, _debugMessenger) = _instance.createDebugUtilsMessengerEXT(GetDebugUtilsMessengerCreateInfo());
+        std::tie(result, _debugMessenger) = _instance->createDebugUtilsMessengerEXTUnique(GetDebugUtilsMessengerCreateInfo()).asTuple();
         VK_CHECK(result);
 #endif
     }
@@ -223,7 +184,7 @@ namespace Graphics {
     void Engine::InitPhysicalDeviceAndSurface() {
         vk::Result result;
         std::vector<vk::PhysicalDevice> gpus;
-        std::tie(result, gpus) = _instance.enumeratePhysicalDevices();
+        std::tie(result, gpus) = _instance->enumeratePhysicalDevices();
         VK_CHECK(result);
 
         for (const auto& gpu : gpus) {
@@ -231,7 +192,7 @@ namespace Graphics {
             assert(!queueFamilyProperties.empty());
 
             if (_surface) {
-                _instance.destroySurfaceKHR(_surface);
+                _instance->destroySurfaceKHR(*_surface);
             }
 
             // Call SDL to reassign surface
@@ -240,7 +201,7 @@ namespace Graphics {
             uint32_t count = static_cast<uint32_t>(queueFamilyProperties.size());
             for(uint32_t i = 0; i < count; i++) {
                 vk::Bool32 supportsPresent;
-                std::tie(result, supportsPresent) = gpu.getSurfaceSupportKHR(i, _surface);
+                std::tie(result, supportsPresent) = gpu.getSurfaceSupportKHR(i, *_surface);
                 VK_CHECK(result);
 
                 // Get queue family with graphics and present capabilities
@@ -283,32 +244,27 @@ namespace Graphics {
             &queuePriority
         };
 
-        vk::DeviceCreateInfo deviceCreateInfo {
-            {}, // Flags
-            queueCreateInfo,
-            {},
-            extensions
-        };
-
-        std::tie(result, _device) = _physicalDevice.createDevice(deviceCreateInfo);
+        std::tie(result, _device) = _physicalDevice.createDeviceUnique({{}, queueCreateInfo, {}, extensions}).asTuple();
         VK_CHECK(result);
 
-        _queue = _device.getQueue(_graphicsQueueIndex, 0);
+        _queue = _device->getQueue(_graphicsQueueIndex, 0);
     }
 
     void Engine::CreateSurface() {
-        assert(SDL_Vulkan_CreateSurface(_window, _instance, (VkSurfaceKHR *)(&_surface)) == SDL_TRUE);
+        vk::SurfaceKHR surface;
+        assert(SDL_Vulkan_CreateSurface(_window, *_instance, (VkSurfaceKHR *)(&surface)) == SDL_TRUE);
+        _surface = vk::UniqueSurfaceKHR {surface, *_instance};
     }
 
     void Engine::InitSwapchain() {
         vk::Result result;
 
         vk::SurfaceCapabilitiesKHR surfaceProperties;
-        std::tie(result, surfaceProperties) = _physicalDevice.getSurfaceCapabilitiesKHR(_surface);
+        std::tie(result, surfaceProperties) = _physicalDevice.getSurfaceCapabilitiesKHR(*_surface);
         VK_CHECK(result);
 
         std::vector<vk::SurfaceFormatKHR> formats;
-        std::tie(result, formats) = _physicalDevice.getSurfaceFormatsKHR(_surface);
+        std::tie(result, formats) = _physicalDevice.getSurfaceFormatsKHR(*_surface);
         VK_CHECK(result);
 
         vk::SurfaceFormatKHR format;
@@ -344,7 +300,7 @@ namespace Graphics {
         vk::Extent2D swapchainSize = ChooseSwapExtent(surfaceProperties);
 
         std::vector<vk::PresentModeKHR> presentModes;
-        std::tie(result, presentModes) = _physicalDevice.getSurfacePresentModesKHR(_surface);
+        std::tie(result, presentModes) = _physicalDevice.getSurfacePresentModesKHR(*_surface);
         VK_CHECK(result);
 
         vk::PresentModeKHR swapchainPresentMode = ChooseSwapPresentMode(presentModes);
@@ -362,10 +318,25 @@ namespace Graphics {
             swapchainImageCount = surfaceProperties.maxImageCount;
         }
 
-        vk::SwapchainKHR oldSwapchain = _swapchain;
-        vk::SwapchainCreateInfoKHR swapchainCreateInfo {
+        vk::SwapchainKHR oldSwapchain = *_swapchain;
+
+        // Tear down old swapchain
+        if (oldSwapchain) {
+            std::vector<vk::Image> swapchainImages;
+            std::tie(result, swapchainImages) = _device->getSwapchainImagesKHR(oldSwapchain);
+            VK_CHECK(result);
+            size_t imageCount = swapchainImages.size();
+            for (size_t i = 0; i < imageCount; i++)
+            {
+                TeardownPerframe(_perframes[i]);
+            }
+
+            _swapchainImageViews.clear();
+        }
+
+        std::tie(result, _swapchain) = _device->createSwapchainKHRUnique({
             {}, // Flags
-            _surface,
+            *_surface,
             swapchainImageCount,
             format.format,
             format.colorSpace,
@@ -378,37 +349,15 @@ namespace Graphics {
             vk::CompositeAlphaFlagBitsKHR::eOpaque,
             swapchainPresentMode, 
             true, // Clipped
-            oldSwapchain
-        };
-
-        std::tie(result, _swapchain) = _device.createSwapchainKHR(swapchainCreateInfo);
+            *_swapchain 
+        }).asTuple();
         VK_CHECK(result);
-
-        // Tear down old swapchain
-        if (oldSwapchain) {
-            for (vk::ImageView imageView : _swapchainImageViews)
-            {
-                _device.destroyImageView(imageView);
-            }
-
-            std::vector<vk::Image> swapchainImages;
-            std::tie(result, swapchainImages) = _device.getSwapchainImagesKHR(oldSwapchain);
-            VK_CHECK(result);
-            size_t imageCount = swapchainImages.size();
-            for (size_t i = 0; i < imageCount; i++)
-            {
-                TeardownPerframe(_perframes[i]);
-            }
-
-            _swapchainImageViews.clear();
-            _device.destroySwapchainKHR(oldSwapchain);
-        }
 
         _swapchainDimensions = swapchainSize;
         _swapchainFormat = format.format;
 
         std::vector<vk::Image> swapchainImages;
-        std::tie(result, swapchainImages) = _device.getSwapchainImagesKHR(_swapchain);
+        std::tie(result, swapchainImages) = _device->getSwapchainImagesKHR(*_swapchain);
         VK_CHECK(result);
         size_t imageCount = swapchainImages.size();
 
@@ -455,14 +404,14 @@ namespace Graphics {
         depthViewInfo.subresourceRange.layerCount = 1;
         depthViewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
 
-        std::tie(result, _depthImageView) = _device.createImageView(depthViewInfo);
+        std::tie(result, _depthImageView) = _device->createImageViewUnique(depthViewInfo).asTuple();
         VK_CHECK(result);
 
         for(size_t i = 0; i < imageCount; i++) {
             viewCreateInfo.image = swapchainImages[i];
-            auto [result, imageView] = _device.createImageView(viewCreateInfo);
+            auto [result, imageView] = _device->createImageViewUnique(viewCreateInfo);
             VK_CHECK(result);
-            _swapchainImageViews.push_back(imageView);
+            _swapchainImageViews.push_back(std::move(imageView));
         }
     }
 
@@ -503,67 +452,68 @@ namespace Graphics {
 
     void Engine::InitPerframe(Perframe &perframe, uint32_t index) {
         vk::Result result;
-        std::tie(result, perframe.queueSubmitFence) = _device.createFence({vk::FenceCreateFlagBits::eSignaled});
+        std::tie(result, perframe.queueSubmitFence) = _device->createFenceUnique(
+            {vk::FenceCreateFlagBits::eSignaled}
+        ).asTuple();
         assert(result == vk::Result::eSuccess);
 
-        vk::CommandPoolCreateInfo cmdPoolInfo{
+        vk::CommandPoolCreateInfo cmdPoolInfo {
             vk::CommandPoolCreateFlagBits::eTransient |
             vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
             _graphicsQueueIndex
         };
 
-        std::tie(result, perframe.primaryCommandPool) = _device.createCommandPool(cmdPoolInfo);
+        std::tie(result, perframe.primaryCommandPool) = _device->createCommandPoolUnique(cmdPoolInfo).asTuple();
         assert(result == vk::Result::eSuccess);
 
-        vk::CommandBufferAllocateInfo cmdBufInfo{
-            perframe.primaryCommandPool,
+        vk::CommandBufferAllocateInfo cmdBufInfo {
+            *perframe.primaryCommandPool,
             vk::CommandBufferLevel::ePrimary,
             1,
         };
 
-        std::vector<vk::CommandBuffer> cmdBuf;
-        std::tie(result, cmdBuf) = _device.allocateCommandBuffers(cmdBufInfo);
-        assert(result == vk::Result::eSuccess);
-        perframe.primaryCommandBuffer = cmdBuf.front();
+        std::vector<vk::UniqueCommandBuffer> cmdBuf;
+        std::tie(result, cmdBuf) = _device->allocateCommandBuffersUnique(cmdBufInfo).asTuple();
+        VK_CHECK(result);
+        perframe.primaryCommandBuffer = std::move(cmdBuf.front());
 
-        perframe.cameraBuffer = CreateBuffer(
+        perframe.cameraBuffer = std::make_unique<AllocatedBuffer>(
+            _allocator,
             sizeof(GPUCameraData),
             vk::BufferUsageFlagBits::eUniformBuffer,
             vma::MemoryUsage::eCpuToGpu
         );
 
-        perframe.device = _device;
         perframe.queueIndex = _graphicsQueueIndex;
         perframe.imageIndex = index;
     }
 
     void Engine::TeardownPerframe(Perframe &perframe) {
-        if (perframe.cameraBuffer.buffer) {
-            _allocator.destroyBuffer(perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
-        }
+        // if (perframe.cameraBuffer->buffer) {
+        //     _allocator.destroyBuffer(perframe.cameraBuffer->buffer, perframe.cameraBuffer->allocation);
+        // }
 
-        if (perframe.queueSubmitFence) {
-            _device.destroyFence(perframe.queueSubmitFence);
-            perframe.queueSubmitFence = nullptr;
-        }
-        if (perframe.primaryCommandBuffer) {
-            _device.freeCommandBuffers(perframe.primaryCommandPool, perframe.primaryCommandBuffer);
-            perframe.primaryCommandBuffer = nullptr;
-        }
-        if (perframe.primaryCommandPool) {
-            _device.destroyCommandPool(perframe.primaryCommandPool);
-            perframe.primaryCommandPool = nullptr;
-        }
-        if (perframe.swapchainAcquireSemaphore) {
-            _device.destroySemaphore(perframe.swapchainAcquireSemaphore);
-            perframe.swapchainAcquireSemaphore = nullptr;
-        }
-        if (perframe.swapchainReleaseSemaphore) {
-            _device.destroySemaphore(perframe.swapchainReleaseSemaphore);
-            perframe.swapchainReleaseSemaphore = nullptr;
-        }
+        // if (perframe.queueSubmitFence) {
+        //     _device->destroyFence(perframe.queueSubmitFence);
+        //     perframe.queueSubmitFence = nullptr;
+        // }
+        // if (perframe.primaryCommandBuffer) {
+        //     _device->freeCommandBuffers(perframe.primaryCommandPool, perframe.primaryCommandBuffer);
+        //     perframe.primaryCommandBuffer = nullptr;
+        // }
+        // if (perframe.primaryCommandPool) {
+        //     _device->destroyCommandPool(perframe.primaryCommandPool);
+        //     perframe.primaryCommandPool = nullptr;
+        // }
+        // if (perframe.swapchainAcquireSemaphore) {
+        //     _device->destroySemaphore(perframe.swapchainAcquireSemaphore);
+        //     perframe.swapchainAcquireSemaphore = nullptr;
+        // }
+        // if (perframe.swapchainReleaseSemaphore) {
+        //     _device->destroySemaphore(perframe.swapchainReleaseSemaphore);
+        //     perframe.swapchainReleaseSemaphore = nullptr;
+        // }
 
-        perframe.device = nullptr;
         perframe.queueIndex = -1;
         perframe.imageIndex = -1;
     }
@@ -577,11 +527,9 @@ namespace Graphics {
             nullptr
         };
 
-        std::array<vk::DescriptorSetLayoutBinding, 1> bindings = { camBufferBinding };
-        vk::DescriptorSetLayoutCreateInfo setInfo = {{}, bindings}; 
-
+        std::array<vk::DescriptorSetLayoutBinding, 1> bindings = {camBufferBinding};
         vk::Result result;
-        std::tie(result, _globalSetLayout) = _device.createDescriptorSetLayout(setInfo);
+        std::tie(result, _globalSetLayout) = _device->createDescriptorSetLayoutUnique({{}, bindings}).asTuple();
         VK_CHECK(result);
 
         std::vector<vk::DescriptorPoolSize> sizes = {
@@ -590,20 +538,18 @@ namespace Graphics {
 
         vk::DescriptorPoolCreateInfo poolInfo {{}, 10, sizes};
 
-        std::tie(result, _descriptorPool) = _device.createDescriptorPool(poolInfo);
+        std::tie(result, _descriptorPool) = _device->createDescriptorPoolUnique(poolInfo).asTuple();
         VK_CHECK(result);
 
         for(int i  = 0; i < _perframes.size(); i++) {
-            std::vector<vk::DescriptorSet> descriptorSets;
-
             // Does not need to be explicitly freed
-            std::tie(result, _perframes[i].globalDescriptor) = _device.allocateDescriptorSets({_descriptorPool, _globalSetLayout});
+            std::tie(result, _perframes[i].globalDescriptor) = _device->allocateDescriptorSets({*_descriptorPool, *_globalSetLayout});
             VK_CHECK(result);
 
-            vk::DescriptorBufferInfo bufferInfo {_perframes[i].cameraBuffer.buffer, 0, sizeof(GPUCameraData)};
+            vk::DescriptorBufferInfo bufferInfo {_perframes[i].cameraBuffer->buffer, 0, sizeof(GPUCameraData)};
 
-            _device.updateDescriptorSets({{
-                _perframes[i].globalDescriptor[0],
+            _device->updateDescriptorSets({{
+                _perframes[i].globalDescriptor.front(),
                 0,
                 0,
                 vk::DescriptorType::eUniformBuffer,
@@ -620,12 +566,11 @@ namespace Graphics {
         // Create push constant accesible only to vertex shader
         vk::PushConstantRange pushConstant {vk::ShaderStageFlagBits::eVertex, 0, sizeof(MeshPushConstants)};
 
-
         // Create a pipeline layout with 1 push constant.
-        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, _globalSetLayout, pushConstant});
+        std::tie(result, _pipelineLayout) = _device->createPipelineLayoutUnique({{}, *_globalSetLayout, pushConstant}).asTuple();
         VK_CHECK(result);
 
-        builder.SetPipelineLayout(_pipelineLayout);
+        builder.SetPipelineLayout(*_pipelineLayout);
 
         VertexInputDescription vertexInputDescription = Vertex::GetInputDescription();
 
@@ -685,14 +630,14 @@ namespace Graphics {
         builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eFragment, fragShader, "main"});
 
 
-        std::tie(result, _pipeline) = builder.Build(_device, _renderPass);
+        std::tie(result, _pipeline) = builder.BuildUnique(*_device, *_renderPass).asTuple();
         VK_CHECK(result);
 
-        _device.destroyShaderModule(vertShader);
-        _device.destroyShaderModule(fragShader);
+        _device->destroyShaderModule(vertShader);
+        _device->destroyShaderModule(fragShader);
         builder.FlushShaderModules();
 
-        CreateMaterial(_pipeline, _pipelineLayout, "defaultMesh");
+        CreateMaterial(*_pipeline, *_pipelineLayout, "defaultMesh");
     }
 
     void Engine::InitRenderPass() {
@@ -759,26 +704,26 @@ namespace Graphics {
         dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
 
         std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-        vk::RenderPassCreateInfo renderPassCreateInfo {{}, attachments, subpass, dependency};
 
         vk::Result result;
-        std::tie(result, _renderPass) = _device.createRenderPass(renderPassCreateInfo);
+        std::tie(result, _renderPass) = _device->createRenderPassUnique({{}, attachments, subpass, dependency}).asTuple();
         VK_CHECK(result);
     }
 
     void Engine::InitFramebuffers() {
 
         for (auto &imageView : _swapchainImageViews) {
-            std::array<vk::ImageView, 2> attachments = {imageView, _depthImageView};
+            std::array<vk::ImageView, 2> attachments = {*imageView, *_depthImageView};
             vk::FramebufferCreateInfo fbInfo {
                 {},
-                _renderPass,
+                *_renderPass,
                 attachments,
                 _swapchainDimensions.width,
                 _swapchainDimensions.height,
                 1
             };
-            auto [result, framebuffer] = _device.createFramebuffer(fbInfo);
+            fbInfo.attachmentCount = 2;
+            auto [result, framebuffer] = _device->createFramebuffer(fbInfo);
             VK_CHECK(result);
             _swapchainFramebuffers.push_back(framebuffer);
         }
@@ -788,10 +733,10 @@ namespace Graphics {
         vma::AllocatorCreateInfo allocatorInfo {
             {},
             _physicalDevice,
-            _device
+            *_device
         };
 
-        allocatorInfo.instance = _instance;
+        allocatorInfo.instance = *_instance;
         vk::Result result;
         std::tie(result, _allocator) = vma::createAllocator(allocatorInfo);
         VK_CHECK(result);
@@ -814,7 +759,7 @@ namespace Graphics {
         }
 
         // Begin render pass
-        auto cmd = _perframes[index].primaryCommandBuffer;
+        auto cmd = *_perframes[index].primaryCommandBuffer;
 
         vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
         VK_CHECK(cmd.begin(beginInfo));
@@ -828,7 +773,7 @@ namespace Graphics {
         std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
 
         vk::RenderPassBeginInfo rpBeginInfo {
-            _renderPass, _swapchainFramebuffers[index],
+            *_renderPass, _swapchainFramebuffers[index],
             {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
             clearValues
         };
@@ -849,7 +794,7 @@ namespace Graphics {
     }
 
     void Engine::EndFrame(Perframe* perframe) {
-        auto cmd = perframe->primaryCommandBuffer;
+        auto cmd = *perframe->primaryCommandBuffer;
 
         cmd.endRenderPass();
 
@@ -857,19 +802,19 @@ namespace Graphics {
 
         if (!perframe->swapchainReleaseSemaphore) {
             vk::Result result;
-            std::tie(result, perframe->swapchainReleaseSemaphore) = _device.createSemaphore({});
+            std::tie(result, perframe->swapchainReleaseSemaphore) = _device->createSemaphoreUnique({}).asTuple();
             VK_CHECK(result);
         }
 
         vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
         vk::SubmitInfo info {
-            perframe->swapchainAcquireSemaphore,
-            waitStage, perframe->primaryCommandBuffer,
-            perframe->swapchainReleaseSemaphore
+            *perframe->swapchainAcquireSemaphore,
+            waitStage, *perframe->primaryCommandBuffer,
+            *perframe->swapchainReleaseSemaphore
         };
 
-        VK_CHECK(_queue.submit(info, perframe->queueSubmitFence));
+        VK_CHECK(_queue.submit(info, *perframe->queueSubmitFence));
 
         vk::Result res = Present(perframe);
 
@@ -889,20 +834,20 @@ namespace Graphics {
 
     vk::Result Engine::AcquireNextImage(uint32_t *image) {
         vk::Result result;
-        vk::Semaphore acquireSemaphore;
+        vk::UniqueSemaphore acquireSemaphore;
 
         if (_recycledSemaphores.empty()) {
-            std::tie(result, acquireSemaphore) = _device.createSemaphore({});
+            std::tie(result, acquireSemaphore) = _device->createSemaphoreUnique({}).asTuple();
             VK_CHECK(result);
         } else {
-            acquireSemaphore = _recycledSemaphores.back();
+            acquireSemaphore = std::move(_recycledSemaphores.back());
             _recycledSemaphores.pop_back();
         }
 
-        std::tie(result, *image) = _device.acquireNextImageKHR(_swapchain, UINT64_MAX, acquireSemaphore);
+        std::tie(result, *image) = _device->acquireNextImageKHR(*_swapchain, UINT64_MAX, *acquireSemaphore);
 
         if (result != vk::Result::eSuccess) {
-            _recycledSemaphores.push_back(acquireSemaphore);
+            _recycledSemaphores.push_back(std::move(acquireSemaphore));
             return result;
         }
 
@@ -914,84 +859,84 @@ namespace Graphics {
         // waiting for all GPU work to complete before this returns.
         // Normally, this doesn't really block at all,
         // since we're waiting for old frames to have been completed, but just in case.
-        if (_perframes[*image].queueSubmitFence) {
-            VK_CHECK(_device.waitForFences(_perframes[*image].queueSubmitFence, true, UINT64_MAX));
-            VK_CHECK(_device.resetFences(_perframes[*image].queueSubmitFence));
+        if (*_perframes[*image].queueSubmitFence) {
+            VK_CHECK(_device->waitForFences(*_perframes[*image].queueSubmitFence, true, UINT64_MAX));
+            VK_CHECK(_device->resetFences(*_perframes[*image].queueSubmitFence));
         }
 
-        if (_perframes[*image].primaryCommandPool)
+        if (*_perframes[*image].primaryCommandPool)
         {
-            VK_CHECK(_device.resetCommandPool(_perframes[*image].primaryCommandPool));
+            VK_CHECK(_device->resetCommandPool(*_perframes[*image].primaryCommandPool));
         }
 
         // Release semaphore back into the manager
-        vk::Semaphore oldSemaphore = _perframes[*image].swapchainAcquireSemaphore;
-        if (oldSemaphore) {
-            _recycledSemaphores.push_back(oldSemaphore);
+        if (_perframes[*image].swapchainAcquireSemaphore) {
+            _recycledSemaphores.push_back(std::move(_perframes[*image].swapchainAcquireSemaphore));
         }
 
-        _perframes[*image].swapchainAcquireSemaphore = acquireSemaphore;
+        _perframes[*image].swapchainAcquireSemaphore = std::move(acquireSemaphore);
         return vk::Result::eSuccess;
     }
 
     vk::Result Engine::DrawFrame(uint32_t index, const std::vector<Renderable> &objects) {
-        auto fb = _swapchainFramebuffers[index];
-        auto cmd = _perframes[index].primaryCommandBuffer;
+        // auto fb = _swapchainFramebuffers[index];
+        // auto cmd = _perframes[index].primaryCommandBuffer;
 
-        vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
-        VK_CHECK(cmd.begin(beginInfo));
+        // vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+        // VK_CHECK(cmd.begin(beginInfo));
 
-        vk::ClearValue clearValue;
-        clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
+        // vk::ClearValue clearValue;
+        // clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
 
-        vk::ClearValue depthClear;
-        depthClear.depthStencil.depth = 1.f;
+        // vk::ClearValue depthClear;
+        // depthClear.depthStencil.depth = 1.f;
 
-        std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
+        // std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
 
-        vk::RenderPassBeginInfo rpBeginInfo {
-            _renderPass, fb, {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
-            clearValues
-        };
+        // vk::RenderPassBeginInfo rpBeginInfo {
+        //     *_renderPass, fb, {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
+        //     clearValues
+        // };
 
-        cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
+        // cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
 
-        vk::Viewport vp {
-            0.0f, 0.0f, 
-            static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
-            0.0f, 0.1f
-        };
-        cmd.setViewport(0, vp);
+        // vk::Viewport vp {
+        //     0.0f, 0.0f, 
+        //     static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
+        //     0.0f, 0.1f
+        // };
+        // cmd.setViewport(0, vp);
 
-        vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
-        cmd.setScissor(0, scissor);
+        // vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
+        // cmd.setScissor(0, scissor);
 
-        DrawObjects(cmd, objects.data(), objects.size());
+        // DrawObjects(cmd, objects.data(), objects.size());
 
-        cmd.endRenderPass();
+        // cmd.endRenderPass();
 
-        VK_CHECK(cmd.end());
+        // VK_CHECK(cmd.end());
 
-        if (!_perframes[index].swapchainReleaseSemaphore) {
-            vk::Result result;
-            std::tie(result, _perframes[index].swapchainReleaseSemaphore) = _device.createSemaphore({});
-            VK_CHECK(result);
-        }
+        // if (!_perframes[index].swapchainReleaseSemaphore) {
+        //     vk::Result result;
+        //     std::tie(result, _perframes[index].swapchainReleaseSemaphore) = _device->createSemaphore({});
+        //     VK_CHECK(result);
+        // }
 
-        vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        // vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
-        vk::SubmitInfo info {
-            _perframes[index].swapchainAcquireSemaphore,
-            waitStage, cmd,
-            _perframes[index].swapchainReleaseSemaphore
-        };
+        // vk::SubmitInfo info {
+        //     _perframes[index].swapchainAcquireSemaphore,
+        //     waitStage, cmd,
+        //     _perframes[index].swapchainReleaseSemaphore
+        // };
 
-        return _queue.submit(info, _perframes[index].queueSubmitFence);
+        // return _queue.submit(info, _perframes[index].queueSubmitFence);
+        return vk::Result::eSuccess;
     }
 
     vk::Result Engine::Present(Perframe *perframe) {
         vk::PresentInfoKHR present {
-            perframe->swapchainReleaseSemaphore, _swapchain, perframe->imageIndex
+            *perframe->swapchainReleaseSemaphore, *_swapchain, perframe->imageIndex
         };
         // Avoid assertion failure on result because we want to
         // bypass assert check on vk::Result::eOutdated and handle manually
@@ -1003,7 +948,7 @@ namespace Graphics {
             return;
         }
 
-        auto [result, surfaceProperties] = _physicalDevice.getSurfaceCapabilitiesKHR(_surface);
+        auto [result, surfaceProperties] = _physicalDevice.getSurfaceCapabilitiesKHR(*_surface);
 
         // Only rebuild the swapchain if the dimensions have changed
         if (surfaceProperties.currentExtent.width == _swapchainDimensions.width &&
@@ -1012,34 +957,26 @@ namespace Graphics {
             return;
         }
 
-        VK_CHECK(_device.waitIdle());
+        VK_CHECK(_device->waitIdle());
         TeardownFramebuffers();
         InitSwapchain();
         InitFramebuffers();
     }
 
     void Engine::WaitIdle() {
-        vkDeviceWaitIdle(_device);
+        vkDeviceWaitIdle(*_device);
     }
 
     void Engine::TeardownFramebuffers() {
         VK_CHECK(_queue.waitIdle());
         for(auto &framebuffer : _swapchainFramebuffers) {
-            _device.destroyFramebuffer(framebuffer);
+            _device->destroyFramebuffer(framebuffer);
         }
         _swapchainFramebuffers.clear();
     }
 
     AllocatedBuffer Engine::CreateBuffer(size_t size, vk::BufferUsageFlags usage, vma::MemoryUsage memoryUsage) {
-        AllocatedBuffer buffer;
-        auto [result, bufAlloc] = _allocator.createBuffer(
-            {{}, size, usage, vk::SharingMode::eExclusive},
-            {{}, memoryUsage}
-        );
-        VK_CHECK(result);
-        buffer.buffer = bufAlloc.first;
-        buffer.allocation = bufAlloc.second;
-        return buffer;
+        return AllocatedBuffer {_allocator, size, usage, memoryUsage};
     }
 
     vk::ShaderModule Engine::LoadShaderModule(const char *path) {
@@ -1049,7 +986,7 @@ namespace Graphics {
             static_cast<size_t>(spirv.size()), 
             reinterpret_cast<const uint32_t *>(spirv.data())
         );
-        auto [result, mod] = _device.createShaderModule(moduleInfo);
+        auto [result, mod] = _device->createShaderModule(moduleInfo);
         VK_CHECK(result);
         return mod;
     }
@@ -1123,7 +1060,7 @@ namespace Graphics {
 
             if (obj.mesh != lastMesh) {
                 vk::DeviceSize offset = 0;
-                cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer.buffer, &offset);
+                cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer->buffer, &offset);
                 lastMesh = obj.mesh;
             }
 
@@ -1135,9 +1072,7 @@ namespace Graphics {
         Mesh* pMesh = GetMesh(path);
         if (pMesh != nullptr) return GetMesh(path);
 
-        auto [result, mesh] = Mesh::FromObj("assets/Monkey/monkey.obj", _allocator);
-        if (!result) return nullptr;
-        _meshes[path] = mesh;
+        _meshes[path] = Mesh::FromObj("assets/Monkey/monkey.obj", _allocator);
         return &_meshes[path];
     }
 

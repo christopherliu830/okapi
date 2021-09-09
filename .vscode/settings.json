@@ -85,6 +85,14 @@
     "xstring": "cpp",
     "xtree": "cpp",
     "xutility": "cpp",
-    "variant": "cpp"
+    "variant": "cpp",
+    "clocale": "cpp",
+    "cstdarg": "cpp",
+    "deque": "cpp",
+    "numeric": "cpp",
+    "optional": "cpp",
+    "queue": "cpp",
+    "random": "cpp",
+    "stack": "cpp"
   }
 }

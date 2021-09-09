@@ -25,16 +25,22 @@ namespace Graphics {
     class Mesh {
 
     public:
-        AllocatedBuffer vertexBuffer;
+        std::unique_ptr<AllocatedBuffer> vertexBuffer;
         std::vector<Vertex> vertices;
         Mesh() {}
 
         void Destroy();
-        static std::pair<bool, Mesh> FromObj(const char* path, vma::Allocator allocator);
+        static Mesh FromObj(const char* path, vma::Allocator allocator);
 
         size_t GetVertexBufferSize() {
             return vertices.size() * sizeof(Vertex);
         }
+
+        // Mesh & operator =(Mesh && other) {
+        //     vertexBuffer = std::move(other.vertexBuffer);
+        //     vertices = std::move(other.vertices);
+        //     return *this; 
+        // }
 
     private:
         vk::Result Allocate();

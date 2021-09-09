@@ -35,15 +35,14 @@ namespace Graphics {
     };
 
     struct Perframe {
-        vk::Device device;
-        vk::Fence queueSubmitFence;
-        vk::CommandPool primaryCommandPool;
-        vk::CommandBuffer primaryCommandBuffer;
-        vk::Semaphore swapchainAcquireSemaphore;
-        vk::Semaphore swapchainReleaseSemaphore;
+        vk::UniqueFence queueSubmitFence;
+        vk::UniqueCommandPool primaryCommandPool;
+        vk::UniqueCommandBuffer primaryCommandBuffer;
+        vk::UniqueSemaphore swapchainAcquireSemaphore;
+        vk::UniqueSemaphore swapchainReleaseSemaphore;
 
         // Buffer that holds a GPUCameraData to use when rendering
-        AllocatedBuffer cameraBuffer;
+        std::unique_ptr<AllocatedBuffer> cameraBuffer;
         std::vector<vk::DescriptorSet> globalDescriptor;
         uint32_t queueIndex;
         uint32_t imageIndex;
@@ -78,34 +77,34 @@ namespace Graphics {
         uint64_t _currentFrame = 0;
 
         SDL_Window* _window;
-        vk::Instance _instance;
+        vk::UniqueInstance _instance;
 #ifndef NDEBUG
-        vk::DebugUtilsMessengerEXT _debugMessenger;
+        vk::UniqueDebugUtilsMessengerEXT _debugMessenger;
 #endif
         uint32_t _graphicsQueueIndex;
         vk::PhysicalDevice _physicalDevice = VK_NULL_HANDLE;
-        vk::Device _device;
-        vk::SurfaceKHR _surface;
-        vk::SwapchainKHR _swapchain;
+        vk::UniqueDevice _device;
+        vk::UniqueSurfaceKHR _surface;
+        vk::UniqueSwapchainKHR _swapchain;
         vk::Queue _queue;
         vk::Format _swapchainFormat;
         vk::Extent2D _swapchainDimensions;
-        vk::RenderPass _renderPass;
-        vk::PipelineLayout _pipelineLayout;
-        vk::Pipeline _pipeline;
-        vk::DescriptorSetLayout _globalSetLayout;
-        vk::DescriptorPool _descriptorPool;
+        vk::UniqueRenderPass _renderPass;
+        vk::UniquePipelineLayout _pipelineLayout;
+        vk::UniquePipeline _pipeline;
+        vk::UniqueDescriptorSetLayout _globalSetLayout;
+        vk::UniqueDescriptorPool _descriptorPool;
         vma::Allocator _allocator; // AMD Vulkan memory allocator
 
         // Depth Testing 
-        vk::ImageView _depthImageView;
+        vk::UniqueImageView _depthImageView;
         vk::Format _depthFormat;
         AllocatedImage _depthImage;
 
         std::vector<Perframe> _perframes;
-        std::vector<vk::ImageView> _swapchainImageViews;
+        std::vector<vk::UniqueImageView> _swapchainImageViews;
         std::vector<vk::Framebuffer> _swapchainFramebuffers;
-        std::vector<vk::Semaphore> _recycledSemaphores;
+        std::vector<vk::UniqueSemaphore> _recycledSemaphores;
         std::vector<Renderable> _renderables;
         std::unordered_map<std::string, Material> _materials;
         std::unordered_map<std::string, Mesh> _meshes;
