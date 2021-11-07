@@ -9,9 +9,10 @@
 #if defined(_WIN32)
 #  define VK_USE_PLATFORM_WIN32_KHR
 #elif defined(__APPLE__)
-#  define VK_USE_PLATFORM_MACOS_MVK
+#  define VK_USE_PLATFORM_MACOS_KHR
 #endif
 
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_macos.h>
 #include <vulkan/vulkan.hpp>
-#include "vma.hpp"
+#include <vk_mem_alloc.h>

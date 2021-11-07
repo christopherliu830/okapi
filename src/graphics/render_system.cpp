@@ -7,13 +7,15 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <math.h>
 
+float g;
+
 namespace Graphics {
     void RenderSystem::Update(entt::registry &registry, float deltaTime) {
         auto view = registry.view<Transform, Renderable>();
         Perframe* perframe = _engine->BeginFrame();
 
         auto [width, height] = _engine->GetWindowSize();
-        glm::vec3 cameraPos {0.f, -6.f, -10.f};
+        glm::vec3 cameraPos {0.f, 0.f, -10.f};
         glm::mat4 viewMatrix = glm::translate(glm::mat4{1.f}, cameraPos);
         glm::mat4 projection = glm::perspective(
             glm::radians(70.f), 
@@ -29,7 +31,8 @@ namespace Graphics {
         camData.viewProj = projection * viewMatrix;
 
         if (perframe) {
-            void* data = _engine->MapMemory(perframe->cameraBuffer.allocation);
+            void* data;
+            _engine->MapMemory(perframe->cameraBuffer.allocation, &data);
             memcpy(data, &camData, sizeof(GPUCameraData));
             _engine->UnmapMemory(perframe->cameraBuffer.allocation);
 
@@ -38,9 +41,8 @@ namespace Graphics {
             Mesh* lastMesh = nullptr;
             Material* lastMaterial = nullptr;
 
+            int i = 0;
             for(auto [entity, transform, obj]: view.each()) {
-                glm::mat4 mvp = projection * viewMatrix * transform.matrix;
-
                 if (obj.material != lastMaterial) {
                     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, obj.material->pipeline);
                     lastMaterial = obj.material;
@@ -53,6 +55,7 @@ namespace Graphics {
 
                 MeshPushConstants mvpMatrix;
                 mvpMatrix.renderMatrix = transform.matrix;
+                transform.matrix = glm::translate(glm::mat4 {1.0f}, glm::vec3 {sin(g + i) * 2, cos(g + i) * 2, 0});
 
                 cmd.pushConstants(
                     obj.material->pipelineLayout,
@@ -62,14 +65,16 @@ namespace Graphics {
 
                 if (obj.mesh != lastMesh) {
                     vk::DeviceSize offset = 0;
-                    cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer.buffer, &offset);
+                    cmd.bindVertexBuffers(0, { obj.mesh->vertexBuffer.buffer }, { offset });
                     lastMesh = obj.mesh;
                 }
 
                 cmd.draw(static_cast<uint32_t>(obj.mesh->vertices.size()), 1, 0, 0);
+                i += 1;
             }
 
             _engine->EndFrame(perframe);
+            g += 0.01f;
         }
     }
 }

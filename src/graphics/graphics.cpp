@@ -5,7 +5,6 @@
 #include "logging.h"
 #include "types.h"
 #include "mesh.h"
-#include "vma.h"
 #include "pipeline.h"
 #include "renderable.h"
 #include <vector>
@@ -35,7 +34,7 @@ namespace Graphics {
             mesh.second.Destroy();
         }
 
-        _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
+        vmaDestroyImage(_allocator, _depthImage.image, _depthImage.allocation);
 
         TeardownFramebuffers();
         for(auto &perframe: _perframes) {
@@ -45,7 +44,8 @@ namespace Graphics {
         _perframes.clear();
 
         if (_allocator) {
-            _allocator.destroy();
+            vmaDestroyAllocator(_allocator);
+            _allocator = nullptr;
         }
 
         for(auto semaphore: _recycledSemaphores) {
@@ -150,7 +150,7 @@ namespace Graphics {
         const std::vector<const char *> &requiredValidationLayers,
         const std::vector<const char *> &requiredInstanceExtensions
     ) {
-        vk::ApplicationInfo applicationInfo("Space Crawler", 1, "No Engine", 1, VK_API_VERSION_1_1);
+        vk::ApplicationInfo applicationInfo("Space Crawler", 1, "No Engine", 1, VK_API_VERSION_1_2);
         vk::InstanceCreateInfo instanceCreateInfo({}, &applicationInfo);
 
         auto [rEnumerateInstance, instanceExtensions] = vk::enumerateInstanceExtensionProperties(); 
@@ -164,7 +164,7 @@ namespace Graphics {
 
     #ifdef VK_USE_PLATFORM_WIN32_KHR
         activeInstanceExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-    #elif defined(VK_USE_PLATFORM_MACOS_MVK)
+    #elif defined(VK_USE_PLATFORM_MACOS_KHR)
         activeInstanceExtensions.push_back(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
     #else
         assert(0);
@@ -250,6 +250,9 @@ namespace Graphics {
             }
 
             _physicalDevice = gpu;
+            vk::PhysicalDeviceProperties properties = gpu.getProperties();
+            LOGI("Enabled GPU: {}", _physicalDevice.getProperties().deviceName);
+            LOGI("Atom Size: {}", properties.limits.nonCoherentAtomSize);
             break;
         }
     }
@@ -297,7 +300,13 @@ namespace Graphics {
     }
 
     void Engine::CreateSurface() {
-        assert(SDL_Vulkan_CreateSurface(_window, _instance, (VkSurfaceKHR *)(&_surface)) == SDL_TRUE);
+#if defined(VK_USE_PLATFORM_METAL_EXT)
+        LOGI("Using Metal");
+#endif
+        if(SDL_Vulkan_CreateSurface(_window, _instance, (VkSurfaceKHR *)(&_surface)) != SDL_TRUE) {
+            LOGE(SDL_GetError());
+            assert(0);
+        }
     }
 
     void Engine::InitSwapchain() {
@@ -438,12 +447,20 @@ namespace Graphics {
         depthBuffer.samples = vk::SampleCountFlagBits::e1,
         depthBuffer.tiling = vk::ImageTiling::eOptimal;
         depthBuffer.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
-        vma::AllocationCreateInfo depthAllocInfo {{}, vma::MemoryUsage::eGpuOnly, vk::MemoryPropertyFlagBits::eDeviceLocal};
-        std::pair<vk::Image, vma::Allocation> imageAlloc;
-        std::tie(result, imageAlloc) = _allocator.createImage(depthBuffer, depthAllocInfo);
-        VK_CHECK(result);
-        _depthImage.image = imageAlloc.first;
-        _depthImage.allocation = imageAlloc.second;
+
+        VmaAllocationCreateInfo depthAllocInfo {};
+        depthAllocInfo.flags = {};
+        depthAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        depthAllocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        VK_CHECK(vmaCreateImage(
+            _allocator,
+            reinterpret_cast<VkImageCreateInfo *>(&depthBuffer),
+            reinterpret_cast<VmaAllocationCreateInfo *>(&depthAllocInfo),
+            reinterpret_cast<VkImage *>(&_depthImage.image),
+            &_depthImage.allocation,
+            nullptr
+        ));
 
         vk::ImageViewCreateInfo depthViewInfo {};
         depthViewInfo.image = _depthImage.image;
@@ -529,7 +546,8 @@ namespace Graphics {
         perframe.cameraBuffer = CreateBuffer(
             sizeof(GPUCameraData),
             vk::BufferUsageFlagBits::eUniformBuffer,
-            vma::MemoryUsage::eCpuToGpu
+            {},
+            VMA_MEMORY_USAGE_CPU_TO_GPU
         );
 
         perframe.device = _device;
@@ -539,7 +557,7 @@ namespace Graphics {
 
     void Engine::TeardownPerframe(Perframe &perframe) {
         if (perframe.cameraBuffer.buffer) {
-            _allocator.destroyBuffer(perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
+            vmaDestroyBuffer(_allocator, perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
         }
 
         if (perframe.queueSubmitFence) {
@@ -785,16 +803,18 @@ namespace Graphics {
     }
 
     void Engine::InitAllocator() {
-        vma::AllocatorCreateInfo allocatorInfo {
-            {},
-            _physicalDevice,
-            _device
-        };
 
+        VmaRecordSettings debug {};
+        debug.pFilePath = "vmalog.csv";
+
+        VmaAllocatorCreateInfo allocatorInfo {};
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
+        allocatorInfo.physicalDevice = _physicalDevice;
+        allocatorInfo.device = _device;
         allocatorInfo.instance = _instance;
-        vk::Result result;
-        std::tie(result, _allocator) = vma::createAllocator(allocatorInfo);
-        VK_CHECK(result);
+        allocatorInfo.pRecordSettings = &debug;
+
+        VK_CHECK(vmaCreateAllocator(&allocatorInfo, &_allocator));
     }
 
     // Returns nullptr if the frame isn't ready yet
@@ -1030,16 +1050,37 @@ namespace Graphics {
         _swapchainFramebuffers.clear();
     }
 
-    AllocatedBuffer Engine::CreateBuffer(size_t size, vk::BufferUsageFlags usage, vma::MemoryUsage memoryUsage) {
+    AllocatedBuffer Engine::CreateBuffer(size_t size, vk::BufferUsageFlags bufferUsage, vk::MemoryPropertyFlags flags, VmaMemoryUsage memoryUsage) {
         AllocatedBuffer buffer;
-        auto [result, bufAlloc] = _allocator.createBuffer(
-            {{}, size, usage, vk::SharingMode::eExclusive},
-            {{}, memoryUsage}
-        );
-        VK_CHECK(result);
-        buffer.buffer = bufAlloc.first;
-        buffer.allocation = bufAlloc.second;
+
+        VkBufferCreateInfo bufferCreateInfo {};
+        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferCreateInfo.flags = {};
+        bufferCreateInfo.size = size;
+        bufferCreateInfo.usage = static_cast<VkBufferUsageFlags>(bufferUsage);
+        bufferCreateInfo.sharingMode = static_cast<VkSharingMode>(vk::SharingMode::eExclusive);
+
+        VmaAllocationCreateInfo allocationCreateInfo {};
+        allocationCreateInfo.flags = {};
+        allocationCreateInfo.usage = memoryUsage;
+        allocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(flags);
+
+        VmaAllocationInfo info;
+
+        VK_CHECK(vmaCreateBuffer(
+            _allocator,
+            &bufferCreateInfo,
+            &allocationCreateInfo,
+            reinterpret_cast<VkBuffer*>(&buffer.buffer),
+            &buffer.allocation,
+            &info 
+        ));
+
         return buffer;
+    }
+
+    void Engine::DestroyBuffer(AllocatedBuffer buffer) {
+        vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
     }
 
     vk::ShaderModule Engine::LoadShaderModule(const char *path) {
@@ -1071,17 +1112,19 @@ namespace Graphics {
         }
     }
 
-    void* Engine::MapMemory(vma::Allocation allocation) {
-        auto [result, data] = _allocator.mapMemory(allocation);
+    vk::Result Engine::MapMemory(VmaAllocation allocation, void **pData) {
+        vk::Result result = (vk::Result)vmaMapMemory(_allocator, allocation, pData);
         VK_CHECK(result);
-        return data;
+        return result;
     }
 
-    void Engine::UnmapMemory(vma::Allocation allocation) {
-        _allocator.unmapMemory(allocation);
+    void Engine::UnmapMemory(VmaAllocation allocation) {
+        VK_CHECK(vmaFlushAllocation(_allocator, allocation, 0, VK_WHOLE_SIZE));
+        vmaUnmapMemory(_allocator, allocation);
     }
 
-    Mesh* Engine::GetMesh(const std::string& name) {
+
+    Mesh* Engine::GetMesh(const std::string &name) {
         auto it = _meshes.find(name);
         if (it == _meshes.end()) {
             return nullptr;
@@ -1112,15 +1155,6 @@ namespace Graphics {
                 lastMaterial = obj.material;
             }
 
-            // MeshPushConstants mvpMatrix;
-            // mvpMatrix.renderMatrix = projection * view * transform.matrix;
-
-            // cmd.pushConstants(
-            //     obj.material->pipelineLayout,
-            //     vk::ShaderStageFlagBits::eVertex,
-            //     0, sizeof(MeshPushConstants), &mvpMatrix
-            // );
-
             if (obj.mesh != lastMesh) {
                 vk::DeviceSize offset = 0;
                 cmd.bindVertexBuffers(0, 1, &obj.mesh->vertexBuffer.buffer, &offset);
@@ -1135,7 +1169,7 @@ namespace Graphics {
         Mesh* pMesh = GetMesh(path);
         if (pMesh != nullptr) return GetMesh(path);
 
-        auto [result, mesh] = Mesh::FromObj("assets/Monkey/monkey.obj", _allocator);
+        auto [result, mesh] = Mesh::FromObj(this, path);
         if (!result) return nullptr;
         _meshes[path] = mesh;
         return &_meshes[path];

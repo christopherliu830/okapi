@@ -11,8 +11,6 @@ target_sources(${PROJECT_NAME} PRIVATE
   renderable.h
   types.h
   util.h
-  vma.h
-  vma.hpp
   vulkan.h
 )
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

@@ -3,3 +3,6 @@
 
 # Ignore shader build files
 *.spv
+
+# Ignore OSX specific files
+.DS_Store

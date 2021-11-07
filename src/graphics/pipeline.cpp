@@ -5,6 +5,7 @@ namespace Graphics {
 
     vk::ResultValue<vk::Pipeline> PipelineBuilder::Build(vk::Device device, vk::RenderPass renderPass) {
         vk::GraphicsPipelineCreateInfo pipe {{}, _shaderStages};
+
         pipe.pVertexInputState = &_vertexInput;
         pipe.pInputAssemblyState = &_inputAssembly;
         pipe.pRasterizationState = &_rasterizer;
@@ -16,7 +17,7 @@ namespace Graphics {
         pipe.renderPass = renderPass;
         pipe.layout = _layout;
 
-        return device.createGraphicsPipeline(nullptr, pipe);
+        return device.createGraphicsPipeline(VK_NULL_HANDLE, pipe);
     }
 
     PipelineBuilder* PipelineBuilder::SetVertexInput(vk::PipelineVertexInputStateCreateInfo info) {

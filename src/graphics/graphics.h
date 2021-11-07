@@ -1,9 +1,9 @@
 #pragma once
 
 #include <vector>
+#include <unordered_map>
 #include <SDL2/SDL.h>
 #include "vulkan.h"
-#include "vma.hpp"
 #include "mesh.h"
 #include "renderable.h"
 
@@ -64,8 +64,10 @@ namespace Graphics {
         Mesh* GetMesh(const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
         Material* GetMaterial(const std::string& name);
-        void* MapMemory(vma::Allocation allocation);
-        void UnmapMemory(vma::Allocation allocation);
+        vk::Result MapMemory(VmaAllocation allocation, void **data);
+        void UnmapMemory(VmaAllocation allocation);
+        AllocatedBuffer CreateBuffer(size_t size, vk::BufferUsageFlags bufferUsage, vk::MemoryPropertyFlags flags, VmaMemoryUsage memoryUsage);
+        void DestroyBuffer(AllocatedBuffer buffer);
 
         Perframe* BeginFrame();
         vk::Result DrawFrame(uint32_t index, const std::vector<Renderable> &objects);
@@ -95,7 +97,7 @@ namespace Graphics {
         vk::Pipeline _pipeline;
         vk::DescriptorSetLayout _globalSetLayout;
         vk::DescriptorPool _descriptorPool;
-        vma::Allocator _allocator; // AMD Vulkan memory allocator
+        VmaAllocator _allocator; // AMD Vulkan memory allocator
 
         // Depth Testing 
         vk::ImageView _depthImageView;
@@ -134,7 +136,6 @@ namespace Graphics {
         void CloseVulkan();
         void TeardownPerframe(Perframe &perframe);
         void TeardownFramebuffers();
-        AllocatedBuffer CreateBuffer(size_t size, vk::BufferUsageFlags flags, vma::MemoryUsage usage);
 
         vk::Result AcquireNextImage(uint32_t *index);
         vk::Result Present(Perframe *perframe);

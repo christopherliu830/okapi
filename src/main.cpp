@@ -19,16 +19,19 @@ struct Velocity {
     float dy;
 };
 
+float globalvar = 0;
+
 // class GravitySystem : EntitySystem {
 class GravitySystem {
 public:
     void Update(entt::registry &registry, float deltaTime) {
         auto view = registry.view<Position, Velocity>();
         view.each([](auto &pos, auto &vel) {
-            vel.dx += 0.01f;
-            pos.x += vel.dx;
-            pos.y += vel.dy;
+            pos.y = sin(globalvar);
+            pos.x = cos(globalvar);
         });
+
+        globalvar += 0.01f;
     }
 };
 
@@ -47,15 +50,14 @@ int main(int argc, char* args[] ) {
     GravitySystem gs;
     SDL_Event e;
 
-    Graphics::Mesh* monkeyMesh = graphics.CreateMesh("assets/Monkey/monkey.obj");
-
+    Graphics::Mesh* monkeyMesh = graphics.CreateMesh("assets/Arwing/Arwing.obj");
     Graphics::Renderable monkey;
     monkey.mesh = monkeyMesh;
     monkey.material = graphics.GetMaterial("defaultMesh");
 
-    for(auto i = 0u; i < 10u; i++) {
+    for(auto i = 0u; i < 14u; i++) {
         const auto entity = registry.create();
-        registry.emplace<Transform>(entity, glm::translate(glm::mat4 {1.0f}, glm::vec3 {5 - i, i, 5 - i}));
+        registry.emplace<Transform>(entity, glm::mat4 {1.0f});
         registry.emplace<Graphics::Renderable>(entity, monkey);
     }
 

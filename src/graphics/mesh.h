@@ -8,6 +8,8 @@
 
 namespace Graphics {
 
+    class Engine;
+
     struct VertexInputDescription {
         std::vector<vk::VertexInputBindingDescription> bindings;
         std::vector<vk::VertexInputAttributeDescription> attributes;
@@ -25,12 +27,14 @@ namespace Graphics {
     class Mesh {
 
     public:
+        Mesh() {}
+        Mesh(Engine *engine) : _engine(engine) {}
+
         AllocatedBuffer vertexBuffer;
         std::vector<Vertex> vertices;
-        Mesh() {}
 
         void Destroy();
-        static std::pair<bool, Mesh> FromObj(const char* path, vma::Allocator allocator);
+        static std::pair<bool, Mesh> FromObj(Engine *engine, const std::string &path);
 
         size_t GetVertexBufferSize() {
             return vertices.size() * sizeof(Vertex);
@@ -38,7 +42,7 @@ namespace Graphics {
 
     private:
         vk::Result Allocate();
-        vma::Allocator _allocator;
+        Engine* _engine;
     };
 
     struct MeshPushConstants {

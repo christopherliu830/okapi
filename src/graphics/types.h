@@ -6,12 +6,12 @@ namespace Graphics {
 
     struct AllocatedBuffer {
         vk::Buffer buffer;
-        vma::Allocation allocation;
+        VmaAllocation allocation;
     };
 
     struct AllocatedImage {
         vk::Image image;
-        vma::Allocation allocation;
+        VmaAllocation allocation;
     };
 
 

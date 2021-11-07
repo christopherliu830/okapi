@@ -2,6 +2,7 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 #include "logging.h"
+#include "graphics.h"
 
 namespace Graphics {
 
@@ -13,7 +14,7 @@ namespace Graphics {
         VertexInputDescription description;
 
         // One vertex buffer binding with a per-vertex rate
-        vk::VertexInputBindingDescription mainBinding{
+        vk::VertexInputBindingDescription mainBinding {
             0, sizeof(Vertex), vk::VertexInputRate::eVertex
         };
         mainBinding.binding = 0;
@@ -57,43 +58,40 @@ namespace Graphics {
     vk::Result Mesh::Allocate() {
         vk::Result res;
 
-        vk::BufferCreateInfo bufferCreateInfo {{},
-            vertices.size() * sizeof(Vertex),
-            vk::BufferUsageFlagBits::eVertexBuffer
-        };
-        vma::AllocationCreateInfo allocInfo {{}, vma::MemoryUsage::eCpuToGpu};
-        auto [result, bufferAlloc] = _allocator.createBuffer(bufferCreateInfo, allocInfo);
-        VK_CHECK(result);
-        vertexBuffer.buffer = bufferAlloc.first;
-        vertexBuffer.allocation = bufferAlloc.second;
+        vertexBuffer = _engine->CreateBuffer(
+            vertices.size() * sizeof(Vertex), 
+            vk::BufferUsageFlagBits::eVertexBuffer,
+            // vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            vk::MemoryPropertyFlagBits::eHostVisible,
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
 
         void *data;
-
-        res = _allocator.mapMemory(vertexBuffer.allocation, &data);
+        res = _engine->MapMemory(vertexBuffer.allocation, &data);
         if (res != vk::Result::eSuccess) {
-            _allocator.destroyBuffer(vertexBuffer.buffer, vertexBuffer.allocation);
+            _engine->DestroyBuffer(vertexBuffer);
             return res;
         }
 
         memcpy(data, vertices.data(), GetVertexBufferSize());
-        _allocator.unmapMemory(vertexBuffer.allocation);
+
+        _engine->UnmapMemory(vertexBuffer.allocation);
         return res;
     }
 
     void Mesh::Destroy() {
-        _allocator.destroyBuffer(vertexBuffer.buffer, vertexBuffer.allocation);
+        _engine->DestroyBuffer(vertexBuffer);
         vertices.clear();
     }
 
-    std::pair<bool, Mesh> Mesh::FromObj(const char* path, vma::Allocator allocator) {
+    std::pair<bool, Mesh> Mesh::FromObj(Engine *engine, const std::string &path) {
 
         tinyobj::ObjReaderConfig config;
         tinyobj::ObjReader reader;
 
-        Mesh m {};
-        m._allocator = allocator;
+        Mesh m {engine};
 
-        if (!reader.ParseFromFile(path, config)) {
+        if (!reader.ParseFromFile(path.c_str(), config)) {
             if (!reader.Error().empty()) {
                 LOGE(reader.Error());
             }
