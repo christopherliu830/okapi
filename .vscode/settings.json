@@ -1,4 +1,7 @@
 {
+  "cmake.configureSettings": {
+    "CMAKE_TOOLCHAIN_FILE": "C:\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
+  },
   "C_Cpp.default.includePath": [
     "${workspaceFolder}/**",
     "C:/vcpkg/installed/x64-windows/include/"
