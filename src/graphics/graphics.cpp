@@ -804,15 +804,16 @@ namespace Graphics {
 
     void Engine::InitAllocator() {
 
-        VmaRecordSettings debug {};
-        debug.pFilePath = "vmalog.csv";
+        VmaVulkanFunctions vulkanFunctions = {};
+        vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+        vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
 
         VmaAllocatorCreateInfo allocatorInfo {};
         allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
         allocatorInfo.physicalDevice = _physicalDevice;
         allocatorInfo.device = _device;
         allocatorInfo.instance = _instance;
-        allocatorInfo.pRecordSettings = &debug;
+        allocatorInfo.pVulkanFunctions = &vulkanFunctions; 
 
         VK_CHECK(vmaCreateAllocator(&allocatorInfo, &_allocator));
     }

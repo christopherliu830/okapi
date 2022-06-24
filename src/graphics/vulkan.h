@@ -12,7 +12,10 @@
 #  define VK_USE_PLATFORM_MACOS_KHR
 #endif
 
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_macos.h>
 #include <vulkan/vulkan.hpp>
-#include <vk_mem_alloc.h>
+#include <vma/vk_mem_alloc.h>
