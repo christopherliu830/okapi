@@ -58,10 +58,14 @@ namespace Graphics {
         Mesh* GetMesh(const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
         Material* GetMaterial(const std::string& name);
-        vk::Result MapMemory(VmaAllocation allocation, void **data);
-        void UnmapMemory(VmaAllocation allocation);
+        vk::Result MapMemory(vma::Allocation allocation, void **data);
+        void UnmapMemory(vma::Allocation allocation);
         void UploadMemory(AllocatedBuffer buffer, const void * data, size_t size);
-        AllocatedBuffer CreateBuffer(size_t size, vk::BufferUsageFlags bufferUsage, int preferredFlags, int requiredFlags, VmaMemoryUsage memoryUsage);
+        AllocatedBuffer CreateBuffer(size_t size,
+            vk::BufferUsageFlags bufferUsage,
+            vma::AllocationCreateFlags preferredFlags,
+            vk::MemoryPropertyFlags requiredFlags,
+            vma::MemoryUsage memoryUsage);
         void DestroyBuffer(AllocatedBuffer buffer);
 
         Perframe* BeginFrame();
@@ -93,7 +97,7 @@ namespace Graphics {
         vk::Pipeline _pipeline;
         vk::DescriptorSetLayout _globalSetLayout;
         vk::DescriptorPool _descriptorPool;
-        VmaAllocator _allocator; // AMD Vulkan memory allocator
+        vma::Allocator _allocator; // AMD Vulkan memory allocator
 
         // Depth Testing 
         vk::ImageView _depthImageView;

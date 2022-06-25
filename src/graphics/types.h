@@ -8,13 +8,14 @@ namespace Graphics {
 
     struct AllocatedBuffer {
         vk::Buffer buffer;
-        VmaAllocation allocation;
-        VmaAllocationInfo allocInfo;
+        vma::Allocation allocation;
+        vma::AllocationInfo allocInfo;
     };
 
     struct AllocatedImage {
         vk::Image image;
-        VmaAllocation allocation;
+        vma::Allocation allocation;
+        vma::AllocationInfo allocInfo;
     };
 
     struct GPUCameraData {

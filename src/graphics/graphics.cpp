@@ -34,7 +34,7 @@ namespace Graphics {
             mesh.second.Destroy();
         }
 
-        vmaDestroyImage(_allocator, _depthImage.image, _depthImage.allocation);
+        _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
 
         TeardownFramebuffers();
         for(auto &perframe: _perframes) {
@@ -44,7 +44,7 @@ namespace Graphics {
         _perframes.clear();
 
         if (_allocator) {
-            vmaDestroyAllocator(_allocator);
+            _allocator.destroy();
             _allocator = nullptr;
         }
 
@@ -450,19 +450,16 @@ namespace Graphics {
         depthBuffer.tiling = vk::ImageTiling::eOptimal;
         depthBuffer.usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
 
-        VmaAllocationCreateInfo depthAllocInfo {};
+        vma::AllocationCreateInfo depthAllocInfo {};
         depthAllocInfo.flags = {};
-        depthAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-        depthAllocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        depthAllocInfo.usage = vma::MemoryUsage::eGpuOnly;
+        depthAllocInfo.requiredFlags = vk::MemoryPropertyFlagBits::eDeviceLocal;
 
-        VK_CHECK(vmaCreateImage(
-            _allocator,
-            reinterpret_cast<VkImageCreateInfo *>(&depthBuffer),
-            reinterpret_cast<VmaAllocationCreateInfo *>(&depthAllocInfo),
-            reinterpret_cast<VkImage *>(&_depthImage.image),
+        VK_CHECK(_allocator.createImage(&depthBuffer,
+            &depthAllocInfo,
+            &_depthImage.image,
             &_depthImage.allocation,
-            nullptr
-        ));
+            &_depthImage.allocInfo));
 
         vk::ImageViewCreateInfo depthViewInfo {};
         depthViewInfo.image = _depthImage.image;
@@ -548,9 +545,9 @@ namespace Graphics {
         perframe.cameraBuffer = CreateBuffer(
             sizeof(GPUCameraData),
             vk::BufferUsageFlagBits::eUniformBuffer,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+            vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
             {},
-            VMA_MEMORY_USAGE_AUTO
+            vma::MemoryUsage::eAuto
         );
 
         perframe.device = _device;
@@ -640,7 +637,7 @@ namespace Graphics {
             vk::BufferUsageFlagBits::eUniformBuffer,
             {},
             {},
-            VMA_MEMORY_USAGE_CPU_TO_GPU
+            vma::MemoryUsage::eCpuToGpu
         );
     }
 
@@ -817,18 +814,21 @@ namespace Graphics {
 
     void Engine::InitAllocator() {
 
-        VmaVulkanFunctions vulkanFunctions = {};
+        vma::VulkanFunctions vulkanFunctions = {};
         vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
         vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
 
-        VmaAllocatorCreateInfo allocatorInfo {};
+        vma::AllocatorCreateInfo allocatorInfo {};
         allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
         allocatorInfo.physicalDevice = _physicalDevice;
         allocatorInfo.device = _device;
         allocatorInfo.instance = _instance;
         allocatorInfo.pVulkanFunctions = &vulkanFunctions; 
 
-        VK_CHECK(vmaCreateAllocator(&allocatorInfo, &_allocator));
+        vk::Result result;
+        std::tie(result, _allocator) = vma::createAllocator(allocatorInfo);
+        VK_CHECK(result);
+
     }
 
     // Returns nullptr if the frame isn't ready yet
@@ -1067,29 +1067,27 @@ namespace Graphics {
     AllocatedBuffer Engine::CreateBuffer(
         size_t size,
         vk::BufferUsageFlags bufferUsage,
-        int preferredFlags,
-        int requiredFlags,
-        VmaMemoryUsage memoryUsage
+        vma::AllocationCreateFlags preferredFlags,
+        vk::MemoryPropertyFlags requiredFlags,
+        vma::MemoryUsage memoryUsage
     ) {
         AllocatedBuffer buffer;
 
-        VkBufferCreateInfo bufferCreateInfo {};
-        bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        vk::BufferCreateInfo bufferCreateInfo {};
         bufferCreateInfo.flags = {};
         bufferCreateInfo.size = size;
-        bufferCreateInfo.usage = static_cast<VkBufferUsageFlags>(bufferUsage);
-        bufferCreateInfo.sharingMode = static_cast<VkSharingMode>(vk::SharingMode::eExclusive);
+        bufferCreateInfo.usage = bufferUsage;
+        bufferCreateInfo.sharingMode = vk::SharingMode::eExclusive;
 
-        VmaAllocationCreateInfo allocationCreateInfo {};
-        allocationCreateInfo.flags = static_cast<VmaAllocationCreateFlagBits>(preferredFlags);
+        vma::AllocationCreateInfo allocationCreateInfo {};
+        allocationCreateInfo.flags = preferredFlags;
         allocationCreateInfo.usage = memoryUsage;
-        allocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(requiredFlags);
+        allocationCreateInfo.requiredFlags = requiredFlags;
 
-        VK_CHECK(vmaCreateBuffer(
-            _allocator,
+        VK_CHECK(_allocator.createBuffer(
             &bufferCreateInfo,
             &allocationCreateInfo,
-            reinterpret_cast<VkBuffer*>(&buffer.buffer),
+            &buffer.buffer,
             &buffer.allocation,
             &buffer.allocInfo
         ));
@@ -1140,16 +1138,15 @@ namespace Graphics {
         }
     }
 
-    vk::Result Engine::MapMemory(VmaAllocation allocation, void **pData) {
-
-        vk::Result result = (vk::Result)vmaMapMemory(_allocator, allocation, pData);
+    vk::Result Engine::MapMemory(vma::Allocation allocation, void **pData) {
+        vk::Result result = _allocator.mapMemory(allocation, pData);
         VK_CHECK(result);
         return result;
     }
 
-    void Engine::UnmapMemory(VmaAllocation allocation) {
-        VK_CHECK(vmaFlushAllocation(_allocator, allocation, 0, VK_WHOLE_SIZE));
-        vmaUnmapMemory(_allocator, allocation);
+    void Engine::UnmapMemory(vma::Allocation allocation) {
+        _allocator.flushAllocation(allocation, 0, VK_WHOLE_SIZE);
+        _allocator.unmapMemory(allocation);
     }
 
     Mesh* Engine::GetMesh(const std::string &name) {
