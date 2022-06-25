@@ -19,3 +19,4 @@
 #include <vulkan/vulkan_macos.h>
 #include <vulkan/vulkan.hpp>
 #include <vma/vk_mem_alloc.h>
+#include <vk_mem_alloc.hpp>

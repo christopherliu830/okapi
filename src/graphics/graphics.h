@@ -28,12 +28,6 @@ const std::vector<const char*> gDeviceExtensions = {
 
 namespace Graphics {
 
-    struct GPUCameraData {
-        glm::mat4 view;
-        glm::mat4 proj;
-        glm::mat4 viewProj;
-    };
-
     struct Perframe {
         vk::Device device;
         vk::Fence queueSubmitFence;
@@ -66,7 +60,8 @@ namespace Graphics {
         Material* GetMaterial(const std::string& name);
         vk::Result MapMemory(VmaAllocation allocation, void **data);
         void UnmapMemory(VmaAllocation allocation);
-        AllocatedBuffer CreateBuffer(size_t size, vk::BufferUsageFlags bufferUsage, vk::MemoryPropertyFlags flags, VmaMemoryUsage memoryUsage);
+        void UploadMemory(AllocatedBuffer buffer, const void * data, size_t size);
+        AllocatedBuffer CreateBuffer(size_t size, vk::BufferUsageFlags bufferUsage, int preferredFlags, int requiredFlags, VmaMemoryUsage memoryUsage);
         void DestroyBuffer(AllocatedBuffer buffer);
 
         Perframe* BeginFrame();
@@ -86,6 +81,7 @@ namespace Graphics {
 #endif
         uint32_t _graphicsQueueIndex;
         vk::PhysicalDevice _physicalDevice = VK_NULL_HANDLE;
+        vk::PhysicalDeviceProperties _physicalDeviceProperties;
         vk::Device _device;
         vk::SurfaceKHR _surface;
         vk::SwapchainKHR _swapchain;
@@ -111,9 +107,9 @@ namespace Graphics {
         std::vector<Renderable> _renderables;
         std::unordered_map<std::string, Material> _materials;
         std::unordered_map<std::string, Mesh> _meshes;
-        Mesh _mesh;
 
-
+        GPUSceneData _sceneParameters;
+        AllocatedBuffer _sceneParametersBuffer;
 
         void CreateDispatcher();
         void CreateDebugUtilsMessenger();
@@ -145,5 +141,6 @@ namespace Graphics {
         vk::PresentModeKHR ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
         vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
         vk::ShaderModule LoadShaderModule(const char *path);
+        size_t PadUniformBufferSize(size_t originalSize);
     };
 };

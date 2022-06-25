@@ -226,6 +226,7 @@ namespace Graphics {
         std::tie(result, gpus) = _instance.enumeratePhysicalDevices();
         VK_CHECK(result);
 
+        // find a suitable gpu to use (one with the right queue family)
         for (const auto& gpu : gpus) {
             std::vector<vk::QueueFamilyProperties> queueFamilyProperties = gpu.getQueueFamilyProperties();
             assert(!queueFamilyProperties.empty());
@@ -250,11 +251,12 @@ namespace Graphics {
             }
 
             _physicalDevice = gpu;
-            vk::PhysicalDeviceProperties properties = gpu.getProperties();
-            LOGI("Enabled GPU: {}", _physicalDevice.getProperties().deviceName);
-            LOGI("Atom Size: {}", properties.limits.nonCoherentAtomSize);
+            _physicalDeviceProperties = gpu.getProperties();
+            LOGI("Enabled GPU: {}", _physicalDeviceProperties.deviceName);
+            LOGI("Atom Size: {}", _physicalDeviceProperties.limits.nonCoherentAtomSize);
             break;
         }
+
     }
 
     void Engine::InitLogicalDevice(const std::vector<const char *> &requiredDeviceExtensions) {
@@ -546,8 +548,9 @@ namespace Graphics {
         perframe.cameraBuffer = CreateBuffer(
             sizeof(GPUCameraData),
             vk::BufferUsageFlagBits::eUniformBuffer,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
             {},
-            VMA_MEMORY_USAGE_CPU_TO_GPU
+            VMA_MEMORY_USAGE_AUTO
         );
 
         perframe.device = _device;
@@ -618,6 +621,7 @@ namespace Graphics {
             std::tie(result, _perframes[i].globalDescriptor) = _device.allocateDescriptorSets({_descriptorPool, _globalSetLayout});
             VK_CHECK(result);
 
+            // point the descriptor set to the camera buffer
             vk::DescriptorBufferInfo bufferInfo {_perframes[i].cameraBuffer.buffer, 0, sizeof(GPUCameraData)};
 
             _device.updateDescriptorSets({{
@@ -629,6 +633,15 @@ namespace Graphics {
                 bufferInfo 
             }}, {});
         }
+
+        const size_t sceneParametersBufferSize = _perframes.size() * PadUniformBufferSize(sizeof(GPUSceneData));
+        _sceneParametersBuffer = CreateBuffer(
+            sceneParametersBufferSize,
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            {},
+            {},
+            VMA_MEMORY_USAGE_CPU_TO_GPU
+        );
     }
 
     void Engine::InitPipeline() {
@@ -1051,7 +1064,13 @@ namespace Graphics {
         _swapchainFramebuffers.clear();
     }
 
-    AllocatedBuffer Engine::CreateBuffer(size_t size, vk::BufferUsageFlags bufferUsage, vk::MemoryPropertyFlags flags, VmaMemoryUsage memoryUsage) {
+    AllocatedBuffer Engine::CreateBuffer(
+        size_t size,
+        vk::BufferUsageFlags bufferUsage,
+        int preferredFlags,
+        int requiredFlags,
+        VmaMemoryUsage memoryUsage
+    ) {
         AllocatedBuffer buffer;
 
         VkBufferCreateInfo bufferCreateInfo {};
@@ -1062,11 +1081,9 @@ namespace Graphics {
         bufferCreateInfo.sharingMode = static_cast<VkSharingMode>(vk::SharingMode::eExclusive);
 
         VmaAllocationCreateInfo allocationCreateInfo {};
-        allocationCreateInfo.flags = {};
+        allocationCreateInfo.flags = static_cast<VmaAllocationCreateFlagBits>(preferredFlags);
         allocationCreateInfo.usage = memoryUsage;
-        allocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(flags);
-
-        VmaAllocationInfo info;
+        allocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(requiredFlags);
 
         VK_CHECK(vmaCreateBuffer(
             _allocator,
@@ -1074,7 +1091,7 @@ namespace Graphics {
             &allocationCreateInfo,
             reinterpret_cast<VkBuffer*>(&buffer.buffer),
             &buffer.allocation,
-            &info 
+            &buffer.allocInfo
         ));
 
         return buffer;
@@ -1096,6 +1113,16 @@ namespace Graphics {
         return mod;
     }
 
+    size_t Engine::PadUniformBufferSize(size_t originalSize) {
+        // Calculated required alignment based on minimum device offset alignment
+        size_t minUboAlignment = _physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
+        size_t alignedSize = originalSize;
+        if (minUboAlignment > 0) {
+            alignedSize = (alignedSize + minUboAlignment - 1) & ~(minUboAlignment - 1);
+        }
+        return alignedSize;
+    }
+
     Material* Engine::CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string& name) {
         Material mat;
         mat.pipeline = pipeline;
@@ -1114,6 +1141,7 @@ namespace Graphics {
     }
 
     vk::Result Engine::MapMemory(VmaAllocation allocation, void **pData) {
+
         vk::Result result = (vk::Result)vmaMapMemory(_allocator, allocation, pData);
         VK_CHECK(result);
         return result;
@@ -1123,7 +1151,6 @@ namespace Graphics {
         VK_CHECK(vmaFlushAllocation(_allocator, allocation, 0, VK_WHOLE_SIZE));
         vmaUnmapMemory(_allocator, allocation);
     }
-
 
     Mesh* Engine::GetMesh(const std::string &name) {
         auto it = _meshes.find(name);

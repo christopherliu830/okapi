@@ -61,8 +61,8 @@ namespace Graphics {
         vertexBuffer = _engine->CreateBuffer(
             vertices.size() * sizeof(Vertex), 
             vk::BufferUsageFlagBits::eVertexBuffer,
-            // vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            vk::MemoryPropertyFlagBits::eHostVisible,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+            {},
             VMA_MEMORY_USAGE_CPU_TO_GPU
         );
 
