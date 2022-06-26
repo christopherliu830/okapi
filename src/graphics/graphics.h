@@ -38,14 +38,19 @@ namespace Graphics {
 
         // Buffer that holds a GPUCameraData to use when rendering
         AllocatedBuffer cameraBuffer;
-        std::vector<vk::DescriptorSet> globalDescriptor;
+        vk::DescriptorSet globalDescriptor;
         uint32_t queueIndex;
+
+        /**
+         * Index of the Perframe in the engine's array.
+         */
         uint32_t imageIndex;
     };
 
     class Engine {
 
     public:
+        AllocatedBuffer sceneParamsBuffer;
 
         Engine();
         ~Engine();
@@ -66,8 +71,7 @@ namespace Graphics {
          * Write CPU data to device-local memory. If allocation is HOST_VISIBLE, map and write directly,
          * but if not, create a staging buffer. 
          */
-        void UploadMemory(AllocatedBuffer buffer, const void * data, size_t size);
-
+        void UploadMemory(AllocatedBuffer buffer, const void * data, size_t offset, size_t size);
 
         AllocatedBuffer CreateBuffer(size_t size,
             vk::BufferUsageFlags bufferUsage,
@@ -81,6 +85,7 @@ namespace Graphics {
         void DrawObjects(vk::CommandBuffer cmd, const Renderable* first, size_t count);
         void EndFrame(Perframe *perframe);
         std::pair<uint32_t, uint32_t> GetWindowSize();
+        size_t PadUniformBufferSize(size_t originalSize);
 
     private:
 
@@ -122,7 +127,6 @@ namespace Graphics {
         std::unordered_map<std::string, Mesh> _meshes;
 
         GPUSceneData _sceneParameters;
-        AllocatedBuffer _sceneParametersBuffer;
 
         void CreateDispatcher();
         void CreateDebugUtilsMessenger();
@@ -155,6 +159,5 @@ namespace Graphics {
         vk::PresentModeKHR ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
         vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
         vk::ShaderModule LoadShaderModule(const char *path);
-        size_t PadUniformBufferSize(size_t originalSize);
     };
 };

@@ -30,11 +30,20 @@ namespace Graphics {
         camData.view = viewMatrix;
         camData.viewProj = projection * viewMatrix;
 
+        GPUSceneData sceneData;
+        sceneData.ambientColor = glm::vec4 {1, 1, 1, 1};
+
         if (perframe) {
             vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
 
             // Map camera buffer
-            _engine->UploadMemory(perframe->cameraBuffer, &camData, sizeof(GPUCameraData));
+            _engine->UploadMemory(perframe->cameraBuffer, &camData, 0, sizeof(GPUCameraData));
+            _engine->UploadMemory(
+                _engine->sceneParamsBuffer,
+                &sceneData,
+                _engine->PadUniformBufferSize(sizeof(GPUSceneData)) * perframe->imageIndex,
+                sizeof(GPUSceneData)
+            );
 
             Mesh* lastMesh = nullptr;
             Material* lastMaterial = nullptr;
@@ -47,7 +56,7 @@ namespace Graphics {
                     cmd.bindDescriptorSets(
                         vk::PipelineBindPoint::eGraphics,
                         obj.material->pipelineLayout, 0, 
-                        { perframe->globalDescriptor[0] }, {}
+                        { perframe->globalDescriptor }, {}
                     );
                 }
 

@@ -34,6 +34,10 @@ namespace Graphics {
             mesh.second.Destroy();
         }
 
+        if (sceneParamsBuffer.allocation) {
+            _allocator.destroyBuffer(sceneParamsBuffer.buffer, sceneParamsBuffer.allocation);
+        }
+
         _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
 
         TeardownFramebuffers();
@@ -588,16 +592,20 @@ namespace Graphics {
     }
 
     void Engine::InitDescriptors() {
-        vk::DescriptorSetLayoutBinding camBufferBinding = {
-            0, 
-            vk::DescriptorType::eUniformBuffer,
-            1, // Descriptor count
-            vk::ShaderStageFlagBits::eVertex,
-            nullptr
-        };
+        vk::DescriptorSetLayoutBinding cameraBinding {0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex};
+        vk::DescriptorSetLayoutBinding sceneBinding {1, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment};
+        vk::DescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneBinding};
+        vk::DescriptorSetLayoutCreateInfo setInfo {{}, bindings}; 
 
-        std::array<vk::DescriptorSetLayoutBinding, 1> bindings = { camBufferBinding };
-        vk::DescriptorSetLayoutCreateInfo setInfo = {{}, bindings}; 
+        const size_t sceneParametersBufferSize = _perframes.size() * PadUniformBufferSize(sizeof(GPUSceneData));
+        sceneParamsBuffer = CreateBuffer(
+            sceneParametersBufferSize,
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            {},
+            {},
+            vma::MemoryUsage::eCpuToGpu
+        );
+
 
         vk::Result result;
         std::tie(result, _globalSetLayout) = _device.createDescriptorSetLayout(setInfo);
@@ -613,33 +621,23 @@ namespace Graphics {
         VK_CHECK(result);
 
         for(int i  = 0; i < _perframes.size(); i++) {
-            std::vector<vk::DescriptorSet> descriptorSets;
-
             // Does not need to be explicitly freed
-            std::tie(result, _perframes[i].globalDescriptor) = _device.allocateDescriptorSets({_descriptorPool, _globalSetLayout});
+            std::vector<vk::DescriptorSet> descriptors;
+            std::tie(result, descriptors) = _device.allocateDescriptorSets({_descriptorPool, _globalSetLayout});
             VK_CHECK(result);
+            _perframes[i].globalDescriptor = descriptors[0];
 
             // point the descriptor set to the camera buffer
-            vk::DescriptorBufferInfo bufferInfo {_perframes[i].cameraBuffer.buffer, 0, sizeof(GPUCameraData)};
+            vk::DescriptorBufferInfo cameraBufferInfo {_perframes[i].cameraBuffer.buffer, 0, sizeof(GPUCameraData)};
+            vk::DescriptorBufferInfo sceneBufferInfo {sceneParamsBuffer.buffer, PadUniformBufferSize(sizeof(GPUSceneData)) * i, sizeof(GPUSceneData)};
+            vk::WriteDescriptorSet setWrites[] = {
+                {_perframes[i].globalDescriptor, 0, 0, vk::DescriptorType::eUniformBuffer, nullptr, cameraBufferInfo},
+                {_perframes[i].globalDescriptor, 1, 0, vk::DescriptorType::eUniformBuffer, nullptr, sceneBufferInfo},
+            };
 
-            _device.updateDescriptorSets({{
-                _perframes[i].globalDescriptor[0],
-                0,
-                0,
-                vk::DescriptorType::eUniformBuffer,
-                nullptr,
-                bufferInfo 
-            }}, {});
+            _device.updateDescriptorSets(setWrites, {});
         }
 
-        const size_t sceneParametersBufferSize = _perframes.size() * PadUniformBufferSize(sizeof(GPUSceneData));
-        _sceneParametersBuffer = CreateBuffer(
-            sceneParametersBufferSize,
-            vk::BufferUsageFlagBits::eUniformBuffer,
-            {},
-            {},
-            vma::MemoryUsage::eCpuToGpu
-        );
     }
 
     void Engine::InitCommandPool() {
@@ -1163,8 +1161,7 @@ namespace Graphics {
         _allocator.unmapMemory(allocation);
     }
 
-    void Engine::UploadMemory(AllocatedBuffer buffer, const void * data, size_t size) {
-
+    void Engine::UploadMemory(AllocatedBuffer buffer, const void * data, size_t offset, size_t size) {
         vk::MemoryPropertyFlags memPropFlags = _allocator.getAllocationMemoryProperties(buffer.allocation);
         
         if(memPropFlags & vk::MemoryPropertyFlagBits::eHostVisible)
@@ -1172,6 +1169,7 @@ namespace Graphics {
             // Allocation ended up in a mappable memory and is already mapped - write to it directly.
             void * dest;
             MapMemory(buffer.allocation, &dest);
+            dest = reinterpret_cast<char *>(dest) + offset;
             memcpy(dest, data, size);
             UnmapMemory(buffer.allocation);
         }
@@ -1200,7 +1198,8 @@ namespace Graphics {
                 vma::MemoryUsage::eAuto
             );
 
-            memcpy(stagingBuf.allocInfo.pMappedData, data, size);
+            char * dest = reinterpret_cast<char *>(stagingBuf.allocInfo.pMappedData) + offset;
+            memcpy(dest, data, size);
 
             vk::BufferCopy bufCopy = { 0, 0, size };
             cmd.copyBuffer(stagingBuf.buffer, buffer.buffer, 1, &bufCopy);
