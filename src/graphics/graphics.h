@@ -60,7 +60,15 @@ namespace Graphics {
         Material* GetMaterial(const std::string& name);
         vk::Result MapMemory(vma::Allocation allocation, void **data);
         void UnmapMemory(vma::Allocation allocation);
+
+
+        /**
+         * Write CPU data to device-local memory. If allocation is HOST_VISIBLE, map and write directly,
+         * but if not, create a staging buffer. 
+         */
         void UploadMemory(AllocatedBuffer buffer, const void * data, size_t size);
+
+
         AllocatedBuffer CreateBuffer(size_t size,
             vk::BufferUsageFlags bufferUsage,
             vma::AllocationCreateFlags preferredFlags,
@@ -97,6 +105,7 @@ namespace Graphics {
         vk::Pipeline _pipeline;
         vk::DescriptorSetLayout _globalSetLayout;
         vk::DescriptorPool _descriptorPool;
+        vk::CommandPool _commandPool;
         vma::Allocator _allocator; // AMD Vulkan memory allocator
 
         // Depth Testing 
@@ -128,6 +137,7 @@ namespace Graphics {
         void InitSwapchain();
         void InitPerframe(Perframe &perframe, uint32_t index);
         void InitDescriptors();
+        void InitCommandPool();
         void InitPipeline();
         void InitRenderPass();
         void InitFramebuffers();

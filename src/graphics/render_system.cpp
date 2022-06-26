@@ -31,12 +31,10 @@ namespace Graphics {
         camData.viewProj = projection * viewMatrix;
 
         if (perframe) {
-            void* data;
-            _engine->MapMemory(perframe->cameraBuffer.allocation, &data);
-            memcpy(data, &camData, sizeof(GPUCameraData));
-            _engine->UnmapMemory(perframe->cameraBuffer.allocation);
-
             vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
+
+            // Map camera buffer
+            _engine->UploadMemory(perframe->cameraBuffer, &camData, sizeof(GPUCameraData));
 
             Mesh* lastMesh = nullptr;
             Material* lastMaterial = nullptr;

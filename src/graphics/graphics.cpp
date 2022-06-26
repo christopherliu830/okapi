@@ -142,6 +142,7 @@ namespace Graphics {
         InitSwapchain();
         InitRenderPass();
         InitDescriptors();
+        InitCommandPool();
         InitPipeline();
         InitFramebuffers();
     }
@@ -544,8 +545,8 @@ namespace Graphics {
 
         perframe.cameraBuffer = CreateBuffer(
             sizeof(GPUCameraData),
-            vk::BufferUsageFlagBits::eUniformBuffer,
-            vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
+            vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vma::AllocationCreateFlagBits::eHostAccessSequentialWrite | vma::AllocationCreateFlagBits::eHostAccessAllowTransferInstead,
             {},
             vma::MemoryUsage::eAuto
         );
@@ -639,6 +640,19 @@ namespace Graphics {
             {},
             vma::MemoryUsage::eCpuToGpu
         );
+    }
+
+    void Engine::InitCommandPool() {
+        vk::Result result;
+
+        vk::CommandPoolCreateInfo cmdPoolInfo {
+            vk::CommandPoolCreateFlagBits::eTransient |
+            vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+            _graphicsQueueIndex
+        };
+
+        std::tie(result, _commandPool) = _device.createCommandPool(cmdPoolInfo);
+        VK_CHECK(result);
     }
 
     void Engine::InitPipeline() {
@@ -1147,6 +1161,67 @@ namespace Graphics {
     void Engine::UnmapMemory(vma::Allocation allocation) {
         _allocator.flushAllocation(allocation, 0, VK_WHOLE_SIZE);
         _allocator.unmapMemory(allocation);
+    }
+
+    void Engine::UploadMemory(AllocatedBuffer buffer, const void * data, size_t size) {
+
+        vk::MemoryPropertyFlags memPropFlags = _allocator.getAllocationMemoryProperties(buffer.allocation);
+        
+        if(memPropFlags & vk::MemoryPropertyFlagBits::eHostVisible)
+        {
+            // Allocation ended up in a mappable memory and is already mapped - write to it directly.
+            void * dest;
+            MapMemory(buffer.allocation, &dest);
+            memcpy(dest, data, size);
+            UnmapMemory(buffer.allocation);
+        }
+        else {
+            // Allocation ended up in non-mappable memory - need to transfer.
+            vk::Result result;
+
+            // Create a transient command buffer to pass the transfer command.
+            vk::CommandBufferAllocateInfo allocInfo {};
+            allocInfo.level = vk::CommandBufferLevel::ePrimary;
+            allocInfo.commandPool = _commandPool;
+            allocInfo.commandBufferCount = 1;
+
+            std::vector<vk::CommandBuffer> cmds;
+            std::tie(result, cmds) = _device.allocateCommandBuffers(allocInfo);
+            VK_CHECK(result);
+            vk::CommandBuffer cmd = cmds[0];
+
+            VK_CHECK(cmd.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit }));
+
+            AllocatedBuffer stagingBuf = CreateBuffer(
+                size,
+                vk::BufferUsageFlagBits::eTransferSrc,
+                vma::AllocationCreateFlagBits::eHostAccessSequentialWrite | vma::AllocationCreateFlagBits::eMapped,
+                {},
+                vma::MemoryUsage::eAuto
+            );
+
+            memcpy(stagingBuf.allocInfo.pMappedData, data, size);
+
+            vk::BufferCopy bufCopy = { 0, 0, size };
+            cmd.copyBuffer(stagingBuf.buffer, buffer.buffer, 1, &bufCopy);
+
+            VK_CHECK(cmd.end());
+
+            vk::SubmitInfo submitInfo {};
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &cmd;
+
+            vk::Fence fence;
+            std::tie(result, fence) = _device.createFence({});
+
+            VK_CHECK(_queue.submit(submitInfo, fence));
+            VK_CHECK(_device.waitForFences(fence, VK_TRUE, UINT64_MAX));
+            VK_CHECK(_device.resetFences(fence));
+
+            _device.destroyFence(fence);
+            _device.freeCommandBuffers(_commandPool, cmd);
+            _allocator.destroyBuffer(stagingBuf.buffer, stagingBuf.allocation);
+        }
     }
 
     Mesh* Engine::GetMesh(const std::string &name) {
