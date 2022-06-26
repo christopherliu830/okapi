@@ -719,8 +719,8 @@ namespace Graphics {
         std::array<vk::DynamicState, 2> dynamics {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
         builder.SetDynamicState({ {}, dynamics });
 
-        vk::ShaderModule vertShader = LoadShaderModule("assets/shaders/vert.spv");
-        vk::ShaderModule fragShader = LoadShaderModule("assets/shaders/frag.spv");
+        vk::ShaderModule vertShader = LoadShaderModule("assets/shaders/shader.vert.spv");
+        vk::ShaderModule fragShader = LoadShaderModule("assets/shaders/shader.frag.spv");
         builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eVertex, vertShader, "main"});
         builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eFragment, fragShader, "main"});
 

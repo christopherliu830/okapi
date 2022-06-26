@@ -7,7 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <math.h>
 
-float g;
+float currentTime = 0;
 
 namespace Graphics {
     void RenderSystem::Update(entt::registry &registry, float deltaTime) {
@@ -31,7 +31,10 @@ namespace Graphics {
         camData.viewProj = projection * viewMatrix;
 
         GPUSceneData sceneData;
-        sceneData.ambientColor = glm::vec4 {1, 1, 1, 1};
+        float x = (1 + sin(currentTime)) / 2;
+        float y = (1 + sin(currentTime + 3)) / 2;
+        float z = (1 + sin(currentTime + 7)) / 2;
+        sceneData.ambientColor = glm::vec4 {x, y, z, 1};
 
         if (perframe) {
             vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
@@ -62,7 +65,7 @@ namespace Graphics {
 
                 MeshPushConstants mvpMatrix;
                 mvpMatrix.renderMatrix = transform.matrix;
-                transform.matrix = glm::translate(glm::mat4 {1.0f}, glm::vec3 {sin(g + i) * 2, cos(g + i) * 2, 0});
+                transform.matrix = glm::translate(glm::mat4 {1.0f}, glm::vec3 {sin(currentTime + i) * 2, cos(currentTime + i) * 2, 0});
 
                 cmd.pushConstants(
                     obj.material->pipelineLayout,
@@ -81,7 +84,7 @@ namespace Graphics {
             }
 
             _engine->EndFrame(perframe);
-            g += 0.01f;
+            currentTime += 0.1f;
         }
     }
 }
