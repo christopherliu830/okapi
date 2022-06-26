@@ -1,4 +1,4 @@
-## Shockwave
+## Okapi
 
 C++ engine and game written for educational purposes.
 Updated in my free time.
