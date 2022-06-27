@@ -56,8 +56,6 @@ namespace Graphics {
 
     // Allocate buffer's data and map into GPU readable data.
     vk::Result Mesh::Allocate() {
-        vk::Result res;
-
         vertexBuffer = _engine->CreateBuffer(
             vertices.size() * sizeof(Vertex), 
             vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
