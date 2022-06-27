@@ -60,23 +60,15 @@ namespace Graphics {
 
         vertexBuffer = _engine->CreateBuffer(
             vertices.size() * sizeof(Vertex), 
-            vk::BufferUsageFlagBits::eVertexBuffer,
-            vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
+            vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vma::AllocationCreateFlagBits::eDedicatedMemory,
             {},
-            vma::MemoryUsage::eCpuToGpu
+            vma::MemoryUsage::eAuto
         );
 
-        void *data;
-        res = _engine->MapMemory(vertexBuffer.allocation, &data);
-        if (res != vk::Result::eSuccess) {
-            _engine->DestroyBuffer(vertexBuffer);
-            return res;
-        }
+        _engine->UploadMemory(vertexBuffer, vertices.data(), 0, GetVertexBufferSize());
 
-        memcpy(data, vertices.data(), GetVertexBufferSize());
-
-        _engine->UnmapMemory(vertexBuffer.allocation);
-        return res;
+        return vk::Result::eSuccess;
     }
 
     void Mesh::Destroy() {
