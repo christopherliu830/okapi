@@ -1209,11 +1209,16 @@ namespace Graphics {
         if(memPropFlags & vk::MemoryPropertyFlagBits::eHostVisible)
         {
             // Allocation ended up in a mappable memory and is already mapped - write to it directly.
-            void * dest;
-            MapMemory(buffer.allocation, &dest);
-            dest = reinterpret_cast<char *>(dest) + offset;
-            memcpy(dest, data, size);
-            UnmapMemory(buffer.allocation);
+            if (buffer.allocInfo.pMappedData) {
+                memcpy(buffer.allocInfo.pMappedData, data, size);
+            }
+            else {
+                void * dest;
+                MapMemory(buffer.allocation, &dest);
+                dest = reinterpret_cast<char *>(dest) + offset;
+                memcpy(dest, data, size);
+                UnmapMemory(buffer.allocation);
+            }
         }
         else {
             // Allocation ended up in non-mappable memory - need to transfer.
