@@ -6,6 +6,7 @@
 #include "vulkan.h"
 #include "mesh.h"
 #include "renderable.h"
+#include "upload_context.h"
 
 // I don't remember what this layer does
 const std::vector<const char*> gValidationLayers = {
@@ -121,6 +122,8 @@ namespace Graphics {
         vk::Format _depthFormat;
         AllocatedImage _depthImage;
 
+        UploadContext _uploadContext;
+
         std::vector<Perframe> _perframes;
         std::vector<vk::ImageView> _swapchainImageViews;
         std::vector<vk::Framebuffer> _swapchainFramebuffers;
@@ -149,7 +152,7 @@ namespace Graphics {
          */
         void InitDescriptors();
 
-        void InitCommandPool();
+        void InitUploadContext();
         void InitPipeline();
         void InitRenderPass();
         void InitFramebuffers();

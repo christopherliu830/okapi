@@ -68,6 +68,10 @@ namespace Graphics {
             _device.destroyRenderPass(_renderPass);
         }
 
+        if (_uploadContext) {
+            _uploadContext.Destroy(_device);
+        }
+
         if (_objectSetLayout) {
             _device.destroyDescriptorSetLayout(_objectSetLayout);
         }
@@ -150,7 +154,7 @@ namespace Graphics {
         InitSwapchain();
         InitRenderPass();
         InitDescriptors();
-        InitCommandPool();
+        InitUploadContext();
         InitPipeline();
         InitFramebuffers();
     }
@@ -681,17 +685,8 @@ namespace Graphics {
         }
     }
 
-    void Engine::InitCommandPool() {
-        vk::Result result;
-
-        vk::CommandPoolCreateInfo cmdPoolInfo {
-            vk::CommandPoolCreateFlagBits::eTransient |
-            vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-            _graphicsQueueIndex
-        };
-
-        std::tie(result, _commandPool) = _device.createCommandPool(cmdPoolInfo);
-        VK_CHECK(result);
+    void Engine::InitUploadContext() {
+        _uploadContext.Init(_device, _graphicsQueueIndex);
     }
 
     void Engine::InitPipeline() {
@@ -1222,20 +1217,9 @@ namespace Graphics {
         }
         else {
             // Allocation ended up in non-mappable memory - need to transfer.
-            vk::Result result;
 
             // Create a transient command buffer to pass the transfer command.
-            vk::CommandBufferAllocateInfo allocInfo {};
-            allocInfo.level = vk::CommandBufferLevel::ePrimary;
-            allocInfo.commandPool = _commandPool;
-            allocInfo.commandBufferCount = 1;
-
-            std::vector<vk::CommandBuffer> cmds;
-            std::tie(result, cmds) = _device.allocateCommandBuffers(allocInfo);
-            VK_CHECK(result);
-            vk::CommandBuffer cmd = cmds[0];
-
-            VK_CHECK(cmd.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit }));
+            VK_CHECK(_uploadContext.cmd.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit }));
 
             AllocatedBuffer stagingBuf = CreateBuffer(
                 size,
@@ -1249,23 +1233,19 @@ namespace Graphics {
             memcpy(dest, data, size);
 
             vk::BufferCopy bufCopy = { 0, 0, size };
-            cmd.copyBuffer(stagingBuf.buffer, buffer.buffer, 1, &bufCopy);
+            _uploadContext.cmd.copyBuffer(stagingBuf.buffer, buffer.buffer, 1, &bufCopy);
 
-            VK_CHECK(cmd.end());
+            VK_CHECK(_uploadContext.cmd.end());
 
             vk::SubmitInfo submitInfo {};
             submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &cmd;
+            submitInfo.pCommandBuffers = &_uploadContext.cmd;
 
-            vk::Fence fence;
-            std::tie(result, fence) = _device.createFence({});
+            VK_CHECK(_queue.submit(submitInfo, _uploadContext.fence));
+            VK_CHECK(_device.waitForFences(_uploadContext.fence, VK_TRUE, UINT64_MAX));
+            VK_CHECK(_device.resetFences(_uploadContext.fence));
+            _device.resetCommandPool(_uploadContext.commandPool, {});
 
-            VK_CHECK(_queue.submit(submitInfo, fence));
-            VK_CHECK(_device.waitForFences(fence, VK_TRUE, UINT64_MAX));
-            VK_CHECK(_device.resetFences(fence));
-
-            _device.destroyFence(fence);
-            _device.freeCommandBuffers(_commandPool, cmd);
             _allocator.destroyBuffer(stagingBuf.buffer, stagingBuf.allocation);
         }
     }
