@@ -34,7 +34,7 @@ namespace Graphics {
             mesh.second.Destroy();
         }
 
-        if (sceneParamsBuffer.allocation) {
+        if (sceneParamsBuffer.buffer) {
             _allocator.destroyBuffer(sceneParamsBuffer.buffer, sceneParamsBuffer.allocation);
         }
 
@@ -66,6 +66,10 @@ namespace Graphics {
 
         if (_renderPass) {
             _device.destroyRenderPass(_renderPass);
+        }
+
+        if (_objectSetLayout) {
+            _device.destroyDescriptorSetLayout(_objectSetLayout);
         }
 
         if (_globalSetLayout) {
@@ -293,11 +297,15 @@ namespace Graphics {
             &queuePriority
         };
 
+        vk::PhysicalDeviceShaderDrawParametersFeatures shaderFeatures { VK_TRUE };
+
         vk::DeviceCreateInfo deviceCreateInfo {
             {}, // Flags
             queueCreateInfo,
             {},
-            extensions
+            extensions,
+            {},
+            &shaderFeatures
         };
 
         std::tie(result, _device) = _physicalDevice.createDevice(deviceCreateInfo);
@@ -493,7 +501,7 @@ namespace Graphics {
                 return availablePresentMode;
             }
         }
-        return vk::PresentModeKHR::eFifo;
+        return vk::PresentModeKHR::eImmediate;
     }
 
     vk::Extent2D Engine::ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
@@ -561,8 +569,13 @@ namespace Graphics {
     }
 
     void Engine::TeardownPerframe(Perframe &perframe) {
+
+        if (perframe.objectBuffer.buffer) {
+            _allocator.destroyBuffer(perframe.objectBuffer.buffer, perframe.objectBuffer.allocation);
+        }
+
         if (perframe.cameraBuffer.buffer) {
-            vmaDestroyBuffer(_allocator, perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
+            _allocator.destroyBuffer(perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
         }
 
         if (perframe.queueSubmitFence) {
@@ -592,11 +605,21 @@ namespace Graphics {
     }
 
     void Engine::InitDescriptors() {
-        vk::DescriptorSetLayoutBinding cameraBinding {0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex};
-        vk::DescriptorSetLayoutBinding sceneBinding {1, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment};
-        vk::DescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneBinding};
-        vk::DescriptorSetLayoutCreateInfo setInfo {{}, bindings}; 
+        vk::Result result;
+        const int MAX_OBJECTS = 10000;
 
+        // Create per-frame object buffer
+        for (int i = 0; i < _perframes.size(); i++) {
+            _perframes[i].objectBuffer = CreateBuffer(
+                sizeof(GPUObjectData) * MAX_OBJECTS,
+                vk::BufferUsageFlagBits::eStorageBuffer,
+                vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
+                {},
+                vma::MemoryUsage::eAuto
+            );
+        }
+
+        // Create global scene parameters buffer
         const size_t sceneParametersBufferSize = _perframes.size() * PadUniformBufferSize(sizeof(GPUSceneData));
         sceneParamsBuffer = CreateBuffer(
             sceneParametersBufferSize,
@@ -606,18 +629,29 @@ namespace Graphics {
             vma::MemoryUsage::eCpuToGpu
         );
 
-
-        vk::Result result;
-        std::tie(result, _globalSetLayout) = _device.createDescriptorSetLayout(setInfo);
-        VK_CHECK(result);
-
+        // Create descriptor pool
         std::vector<vk::DescriptorPoolSize> sizes = {
-            { vk::DescriptorType::eUniformBuffer, 10 }
+            { vk::DescriptorType::eUniformBuffer, 10 },
+            { vk::DescriptorType::eUniformBufferDynamic, 10 },
+            { vk::DescriptorType::eStorageBuffer, 10 }
         };
 
         vk::DescriptorPoolCreateInfo poolInfo {{}, 10, sizes};
 
         std::tie(result, _descriptorPool) = _device.createDescriptorPool(poolInfo);
+        VK_CHECK(result);
+
+
+        // Global information descriptor set layout
+        vk::DescriptorSetLayoutBinding cameraBinding {0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex};
+        vk::DescriptorSetLayoutBinding sceneBinding {1, vk::DescriptorType::eUniformBufferDynamic, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment};
+        vk::DescriptorSetLayoutBinding bindings[] = {cameraBinding, sceneBinding};
+        std::tie(result, _globalSetLayout) = _device.createDescriptorSetLayout({{}, bindings});
+        VK_CHECK(result);
+
+        // Object descriptor set layout
+        vk::DescriptorSetLayoutBinding objectBinding = {0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eVertex};
+        std::tie(result, _objectSetLayout) = _device.createDescriptorSetLayout({{}, objectBinding});
         VK_CHECK(result);
 
         for(int i  = 0; i < _perframes.size(); i++) {
@@ -627,17 +661,24 @@ namespace Graphics {
             VK_CHECK(result);
             _perframes[i].globalDescriptor = descriptors[0];
 
-            // point the descriptor set to the camera buffer
+            std::vector<vk::DescriptorSet> objectDescriptors;
+            std::tie(result, objectDescriptors) = _device.allocateDescriptorSets({_descriptorPool, _objectSetLayout});
+            VK_CHECK(result);
+            _perframes[i].objectDescriptor = objectDescriptors[0];
+
+            // point the descriptor set to the buffers
             vk::DescriptorBufferInfo cameraBufferInfo {_perframes[i].cameraBuffer.buffer, 0, sizeof(GPUCameraData)};
-            vk::DescriptorBufferInfo sceneBufferInfo {sceneParamsBuffer.buffer, PadUniformBufferSize(sizeof(GPUSceneData)) * i, sizeof(GPUSceneData)};
+            vk::DescriptorBufferInfo sceneBufferInfo {sceneParamsBuffer.buffer, 0, sizeof(GPUSceneData)};
+            vk::DescriptorBufferInfo objectBufferInfo {_perframes[i].objectBuffer.buffer, 0, sizeof(GPUObjectData) * MAX_OBJECTS};
+
             vk::WriteDescriptorSet setWrites[] = {
                 {_perframes[i].globalDescriptor, 0, 0, vk::DescriptorType::eUniformBuffer, nullptr, cameraBufferInfo},
-                {_perframes[i].globalDescriptor, 1, 0, vk::DescriptorType::eUniformBuffer, nullptr, sceneBufferInfo},
+                {_perframes[i].globalDescriptor, 1, 0, vk::DescriptorType::eUniformBufferDynamic, nullptr, sceneBufferInfo},
+                {_perframes[i].objectDescriptor, 0, 0, vk::DescriptorType::eStorageBuffer, nullptr, objectBufferInfo}
             };
 
             _device.updateDescriptorSets(setWrites, {});
         }
-
     }
 
     void Engine::InitCommandPool() {
@@ -662,7 +703,8 @@ namespace Graphics {
 
 
         // Create a pipeline layout with 1 push constant.
-        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, _globalSetLayout, pushConstant});
+        vk::DescriptorSetLayout setLayouts[] = {_globalSetLayout, _objectSetLayout};
+        std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, setLayouts, pushConstant});
         VK_CHECK(result);
 
         builder.SetPipelineLayout(_pipelineLayout);

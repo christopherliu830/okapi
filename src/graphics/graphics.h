@@ -38,6 +38,8 @@ namespace Graphics {
 
         // Buffer that holds a GPUCameraData to use when rendering
         AllocatedBuffer cameraBuffer;
+        AllocatedBuffer objectBuffer;
+        vk::DescriptorSet objectDescriptor;
         vk::DescriptorSet globalDescriptor;
         uint32_t queueIndex;
 
@@ -109,6 +111,7 @@ namespace Graphics {
         vk::PipelineLayout _pipelineLayout;
         vk::Pipeline _pipeline;
         vk::DescriptorSetLayout _globalSetLayout;
+        vk::DescriptorSetLayout _objectSetLayout;
         vk::DescriptorPool _descriptorPool;
         vk::CommandPool _commandPool;
         vma::Allocator _allocator; // AMD Vulkan memory allocator
@@ -140,7 +143,12 @@ namespace Graphics {
         void InitLogicalDevice(const std::vector<const char *> &requiredDeviceExtensions);
         void InitSwapchain();
         void InitPerframe(Perframe &perframe, uint32_t index);
+
+        /**
+         * A descriptor points shaders to data from program
+         */
         void InitDescriptors();
+
         void InitCommandPool();
         void InitPipeline();
         void InitRenderPass();

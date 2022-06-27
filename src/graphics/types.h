@@ -32,4 +32,7 @@ namespace Graphics {
         glm::vec4 sunlightColor;
     };
 
+    struct GPUObjectData {
+        glm::mat4 modelMatrix;
+    };
 };

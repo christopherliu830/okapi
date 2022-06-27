@@ -50,17 +50,16 @@ int main(int argc, char* args[] ) {
     GravitySystem gs;
     SDL_Event e;
 
-    Graphics::Mesh* monkeyMesh = graphics.CreateMesh("assets/Arwing/Arwing.obj");
+    Graphics::Mesh* monkeyMesh = graphics.CreateMesh("assets/Monkey/Monkey.obj");
     Graphics::Renderable monkey;
     monkey.mesh = monkeyMesh;
     monkey.material = graphics.GetMaterial("defaultMesh");
 
-    for(auto i = 0u; i < 14u; i++) {
+    for(auto i = 0u; i < 10u; i++) {
         const auto entity = registry.create();
         registry.emplace<Transform>(entity, glm::mat4 {1.0f});
         registry.emplace<Graphics::Renderable>(entity, monkey);
     }
-
 
     while (!quit) {
         while (SDL_PollEvent(&e) != 0) {
@@ -70,7 +69,7 @@ int main(int argc, char* args[] ) {
         }
         gs.Update(registry, 0);
         rs.Update(registry, 0);
-        SDL_Delay((int)(1.f/60.f*1000.f));
+        // SDL_Delay((int)(1.f/60.f*1000.f));
     }
 
     graphics.WaitIdle();

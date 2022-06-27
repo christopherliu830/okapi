@@ -39,7 +39,7 @@ namespace Graphics {
         if (perframe) {
             vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
 
-            // Map camera buffer
+            // Map buffers
             _engine->UploadMemory(perframe->cameraBuffer, &camData, 0, sizeof(GPUCameraData));
             _engine->UploadMemory(
                 _engine->sceneParamsBuffer,
@@ -51,21 +51,36 @@ namespace Graphics {
             Mesh* lastMesh = nullptr;
             Material* lastMaterial = nullptr;
 
-            int i = 0;
+            assert(perframe->imageIndex < UINT_MAX); // Just in case, should never have so many frames
+            uint32_t uniformOffset = static_cast<unsigned int>(_engine->PadUniformBufferSize(sizeof(GPUSceneData)) * perframe->imageIndex);
+
+            int index = 0;
             for(auto [entity, transform, obj]: view.each()) {
+                // Bind the per-object data
+                _engine->UploadMemory(perframe->objectBuffer, &transform.matrix, index * sizeof(GPUObjectData), sizeof(GPUObjectData));
+
                 if (obj.material != lastMaterial) {
                     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, obj.material->pipeline);
                     lastMaterial = obj.material;
                     cmd.bindDescriptorSets(
                         vk::PipelineBindPoint::eGraphics,
-                        obj.material->pipelineLayout, 0, 
-                        { perframe->globalDescriptor }, {}
+                        obj.material->pipelineLayout,
+                        0, 
+                        { perframe->globalDescriptor },
+                        uniformOffset
+                    );
+                    cmd.bindDescriptorSets(
+                        vk::PipelineBindPoint::eGraphics,
+                        obj.material->pipelineLayout,
+                        1,
+                        perframe->objectDescriptor,
+                        {}
                     );
                 }
 
                 MeshPushConstants mvpMatrix;
                 mvpMatrix.renderMatrix = transform.matrix;
-                transform.matrix = glm::translate(glm::mat4 {1.0f}, glm::vec3 {sin(currentTime + i) * 2, cos(currentTime + i) * 2, 0});
+                transform.matrix = glm::translate(glm::mat4 {1.0f}, glm::vec3 {sin(currentTime + index) * 4, cos(currentTime + index) * 4, 0});
 
                 cmd.pushConstants(
                     obj.material->pipelineLayout,
@@ -79,12 +94,11 @@ namespace Graphics {
                     lastMesh = obj.mesh;
                 }
 
-                cmd.draw(static_cast<uint32_t>(obj.mesh->vertices.size()), 1, 0, 0);
-                i += 1;
+                cmd.draw(static_cast<uint32_t>(obj.mesh->vertices.size()), 1, 0, index);
+                index += 1;
             }
-
             _engine->EndFrame(perframe);
-            currentTime += 0.1f;
+            currentTime += 0.01f;
         }
     }
 }
