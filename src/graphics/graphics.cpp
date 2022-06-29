@@ -33,10 +33,9 @@ namespace Graphics {
         for(auto &mesh : _meshes) {
             mesh.second.Destroy();
         }
+        _meshes.clear();
 
-        if (sceneParamsBuffer.buffer) {
-            _allocator.destroyBuffer(sceneParamsBuffer.buffer, sceneParamsBuffer.allocation);
-        }
+        _allocator.destroyBuffer(sceneParamsBuffer.buffer, sceneParamsBuffer.allocation);
 
         _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
 
@@ -47,42 +46,26 @@ namespace Graphics {
 
         _perframes.clear();
 
-        if (_allocator) {
-            _allocator.destroy();
-            _allocator = nullptr;
-        }
+        _allocator.destroy();
+        _allocator = nullptr;
 
         for(auto semaphore: _recycledSemaphores) {
             _device.destroySemaphore(semaphore);
         }
 
-        if (_pipeline) {
-            _device.destroyPipeline(_pipeline);
-        }
+        _device.destroyPipeline(_pipeline);
 
-        if (_pipelineLayout) {
-            _device.destroyPipelineLayout(_pipelineLayout);
-        }
+        _device.destroyPipelineLayout(_pipelineLayout);
 
-        if (_renderPass) {
-            _device.destroyRenderPass(_renderPass);
-        }
+        _device.destroyRenderPass(_renderPass);
 
-        if (_uploadContext) {
-            _uploadContext.Destroy(_device);
-        }
+        _uploadContext.Destroy(_device);
 
-        if (_objectSetLayout) {
-            _device.destroyDescriptorSetLayout(_objectSetLayout);
-        }
+        _device.destroyDescriptorSetLayout(_objectSetLayout);
 
-        if (_globalSetLayout) {
-            _device.destroyDescriptorSetLayout(_globalSetLayout);
-        }
+        _device.destroyDescriptorSetLayout(_globalSetLayout);
 
-        if (_descriptorPool) {
-            _device.destroyDescriptorPool(_descriptorPool);
-        }
+        _device.destroyDescriptorPool(_descriptorPool);
 
         _device.destroyImageView(_depthImageView);
 
@@ -90,26 +73,18 @@ namespace Graphics {
             _device.destroyImageView(imageView);
         }
 
-        if (_swapchain) {
-            _device.destroySwapchainKHR(_swapchain);
-            _swapchain = nullptr;
-        }
+        _device.destroySwapchainKHR(_swapchain);
+        _swapchain = nullptr;
 
-        if (_surface) {
-            _instance.destroySurfaceKHR(_surface);
-            _surface = nullptr;
-        }
+        _instance.destroySurfaceKHR(_surface);
+        _surface = nullptr;
 
-        if (_device) {
-            _device.destroy();
-            _device = nullptr;
-        }
+        _device.destroy();
+        _device = nullptr;
 
 #ifndef NDEBUG
-        if (_debugMessenger) {
-            _instance.destroyDebugUtilsMessengerEXT(_debugMessenger);
-            _debugMessenger = nullptr;
-        }
+        _instance.destroyDebugUtilsMessengerEXT(_debugMessenger);
+        _debugMessenger = nullptr;
 #endif
 
         _instance.destroy();
@@ -539,7 +514,7 @@ namespace Graphics {
         std::tie(result, perframe.queueSubmitFence) = _device.createFence({vk::FenceCreateFlagBits::eSignaled});
         assert(result == vk::Result::eSuccess);
 
-        vk::CommandPoolCreateInfo cmdPoolInfo{
+        vk::CommandPoolCreateInfo cmdPoolInfo {
             vk::CommandPoolCreateFlagBits::eTransient |
             vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
             _graphicsQueueIndex
@@ -574,34 +549,23 @@ namespace Graphics {
 
     void Engine::TeardownPerframe(Perframe &perframe) {
 
-        if (perframe.objectBuffer.buffer) {
-            _allocator.destroyBuffer(perframe.objectBuffer.buffer, perframe.objectBuffer.allocation);
-        }
+        _allocator.destroyBuffer(perframe.objectBuffer.buffer, perframe.objectBuffer.allocation);
+        _allocator.destroyBuffer(perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
 
-        if (perframe.cameraBuffer.buffer) {
-            _allocator.destroyBuffer(perframe.cameraBuffer.buffer, perframe.cameraBuffer.allocation);
-        }
+        _device.destroyFence(perframe.queueSubmitFence);
+        perframe.queueSubmitFence = nullptr;
 
-        if (perframe.queueSubmitFence) {
-            _device.destroyFence(perframe.queueSubmitFence);
-            perframe.queueSubmitFence = nullptr;
-        }
-        if (perframe.primaryCommandBuffer) {
-            _device.freeCommandBuffers(perframe.primaryCommandPool, perframe.primaryCommandBuffer);
-            perframe.primaryCommandBuffer = nullptr;
-        }
-        if (perframe.primaryCommandPool) {
-            _device.destroyCommandPool(perframe.primaryCommandPool);
-            perframe.primaryCommandPool = nullptr;
-        }
-        if (perframe.swapchainAcquireSemaphore) {
-            _device.destroySemaphore(perframe.swapchainAcquireSemaphore);
-            perframe.swapchainAcquireSemaphore = nullptr;
-        }
-        if (perframe.swapchainReleaseSemaphore) {
-            _device.destroySemaphore(perframe.swapchainReleaseSemaphore);
-            perframe.swapchainReleaseSemaphore = nullptr;
-        }
+        _device.freeCommandBuffers(perframe.primaryCommandPool, perframe.primaryCommandBuffer);
+        perframe.primaryCommandBuffer = nullptr;
+
+        _device.destroyCommandPool(perframe.primaryCommandPool);
+        perframe.primaryCommandPool = nullptr;
+
+        _device.destroySemaphore(perframe.swapchainAcquireSemaphore);
+        perframe.swapchainAcquireSemaphore = nullptr;
+
+        _device.destroySemaphore(perframe.swapchainReleaseSemaphore);
+        perframe.swapchainReleaseSemaphore = nullptr;
 
         perframe.device = nullptr;
         perframe.queueIndex = -1;

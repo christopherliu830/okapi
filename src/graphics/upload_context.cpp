@@ -33,5 +33,6 @@ namespace Graphics {
     void UploadContext::Destroy(vk::Device device) {
         device.destroyFence(fence);
         device.freeCommandBuffers(commandPool, cmd);
+        device.destroyCommandPool(commandPool);
     }
 }
