@@ -1257,7 +1257,7 @@ namespace Graphics {
 
     Mesh* Engine::CreateMesh(const std::string &path) {
         Mesh* pMesh = GetMesh(path);
-        if (pMesh != nullptr) return GetMesh(path);
+        if (pMesh != nullptr) return pMesh;
 
         auto [result, mesh] = Mesh::FromObj(this, path);
         if (!result) return nullptr;
