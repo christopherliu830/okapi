@@ -132,6 +132,9 @@
     "ranges": "cpp",
     "stop_token": "cpp",
     "cfenv": "cpp",
-    "cinttypes": "cpp"
+    "cinttypes": "cpp",
+    "format": "cpp",
+    "forward_list": "cpp",
+    "span": "cpp"
   }
 }

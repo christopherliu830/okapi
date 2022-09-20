@@ -55,6 +55,8 @@ int main(int argc, char* args[] ) {
     monkey.mesh = monkeyMesh;
     monkey.material = graphics.GetMaterial("defaultMesh");
 
+    graphics.CreateTexture("assets/test.png");
+
     for(auto i = 0u; i < 10u; i++) {
         const auto entity = registry.create();
         registry.emplace<Transform>(entity, glm::mat4 {1.0f});

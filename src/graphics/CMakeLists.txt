@@ -10,6 +10,8 @@ target_sources(${PROJECT_NAME} PRIVATE
   render_system.cpp
   renderable.h
   types.h
+  texture.h
+  texture.cpp
   upload_context.h
   upload_context.cpp
   util.h

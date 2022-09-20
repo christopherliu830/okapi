@@ -6,6 +6,7 @@
 #include "types.h"
 #include "mesh.h"
 #include "pipeline.h"
+#include "texture.h"
 #include "renderable.h"
 #include <vector>
 #include <iostream>
@@ -59,7 +60,7 @@ namespace Graphics {
 
         _device.destroyRenderPass(_renderPass);
 
-        _uploadContext.Destroy(_device);
+        _uploadContext.Destroy();
 
         _device.destroyDescriptorSetLayout(_objectSetLayout);
 
@@ -1108,8 +1109,31 @@ namespace Graphics {
         return buffer;
     }
 
-    void Engine::DestroyBuffer(AllocatedBuffer buffer) {
-        vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
+    AllocatedImage Engine::CreateImage(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage) {
+        vma::AllocationCreateInfo allocInfo {};
+        AllocatedImage image;
+        allocInfo.usage = vma::MemoryUsage::eAuto;
+
+        vk::ImageCreateInfo imageInfo {
+            {},
+            vk::ImageType::e2D,
+            vk::Format::eR8G8B8Srgb,
+            extent,
+            1,
+            1,
+            vk::SampleCountFlagBits::e1,
+            vk::ImageTiling::eOptimal,
+            usage
+        };
+
+        auto [result, pair] = _allocator.createImage(imageInfo, allocInfo, &image.allocInfo);
+        VK_CHECK(result);
+        image.image = pair.first;
+        image.allocation = pair.second;
+        image.format = format;
+        image.extent = extent;
+
+        return image;
     }
 
     vk::ShaderModule Engine::LoadShaderModule(const char *path) {
@@ -1182,8 +1206,7 @@ namespace Graphics {
         else {
             // Allocation ended up in non-mappable memory - need to transfer.
 
-            // Create a transient command buffer to pass the transfer command.
-            VK_CHECK(_uploadContext.cmd.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit }));
+            _uploadContext.Begin();
 
             AllocatedBuffer stagingBuf = CreateBuffer(
                 size,
@@ -1201,18 +1224,77 @@ namespace Graphics {
 
             VK_CHECK(_uploadContext.cmd.end());
 
-            vk::SubmitInfo submitInfo {};
-            submitInfo.commandBufferCount = 1;
-            submitInfo.pCommandBuffers = &_uploadContext.cmd;
-
-            VK_CHECK(_queue.submit(submitInfo, _uploadContext.fence));
-            VK_CHECK(_device.waitForFences(_uploadContext.fence, VK_TRUE, UINT64_MAX));
-            VK_CHECK(_device.resetFences(_uploadContext.fence));
-            _device.resetCommandPool(_uploadContext.commandPool, {});
+            _uploadContext.SubmitSync(_queue);
 
             _allocator.destroyBuffer(stagingBuf.buffer, stagingBuf.allocation);
         }
     }
+
+    void Engine::UploadImage(AllocatedImage image, void * pixels) {
+
+        vk::ImageSubresourceRange range {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+        // Specify the image transformation to occur between the sides of the pipeline barrier.
+        vk::ImageMemoryBarrier imageBarrierToTransfer {
+            {},
+            vk::AccessFlagBits::eTransferWrite,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eTransferDstOptimal,
+            {},
+            {},
+            image.image,
+            range
+        };
+
+        _uploadContext.Begin();
+
+        // Ensure that writes from TopOfPipe are available for read from the Transfer stage
+        _uploadContext.cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eTransfer,
+            {},
+            {},
+            {},
+            imageBarrierToTransfer
+        );
+        size_t imageSize = image.extent.width * image.extent.height * 4;
+
+        AllocatedBuffer stagingBuffer = CreateBuffer(imageSize,
+            vk::BufferUsageFlagBits::eTransferSrc,
+            vma::AllocationCreateFlagBits::eHostAccessSequentialWrite | vma::AllocationCreateFlagBits::eMapped,
+            {},
+            vma::MemoryUsage::eAuto
+        );
+
+        memcpy(stagingBuffer.allocInfo.pMappedData, pixels, static_cast<size_t>(imageSize));
+
+        vk::BufferImageCopy copyRegion {0, 0, 0, {{}, 0, 0, 1}, {}, image.extent};
+
+        _uploadContext.cmd.copyBufferToImage(stagingBuffer.buffer, image.image, vk::ImageLayout::eTransferDstOptimal, {0, 0, 0});
+
+        // Specify the image transformation to occur between the sides of the pipeline barrier.
+        vk::ImageMemoryBarrier imageBarrierToShader {
+            vk::AccessFlagBits::eTransferWrite,
+            vk::AccessFlagBits::eShaderRead,
+            vk::ImageLayout::eTransferDstOptimal,
+            vk::ImageLayout::eShaderReadOnlyOptimal,
+        };
+
+        _uploadContext.cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eFragmentShader,
+            {},
+            {},
+            {},
+            imageBarrierToShader
+        );
+
+        _uploadContext.SubmitSync(_queue);
+    }
+
+    void Engine::DestroyBuffer(AllocatedBuffer buffer) {
+        _allocator.destroyBuffer(buffer.buffer, buffer.allocation);
+    }   
 
     Mesh* Engine::GetMesh(const std::string &name) {
         auto it = _meshes.find(name);
@@ -1221,6 +1303,16 @@ namespace Graphics {
         } else {
             return &(*it).second;
         }
+    }
+
+    AllocatedImage* Engine::GetImage(const std::string &name) {
+        auto it = _images.find(name);
+        if (it == _images.end()) {
+            return nullptr;
+        } else {
+            return &(*it).second;
+        }
+
     }
 
     void Engine::DrawObjects(vk::CommandBuffer cmd, const Renderable* first, size_t count) {
@@ -1263,6 +1355,14 @@ namespace Graphics {
         if (!result) return nullptr;
         _meshes[path] = mesh;
         return &_meshes[path];
+    }
+
+    AllocatedImage* Engine::CreateTexture(const std::string &path) {
+        AllocatedImage* pImage = GetImage(path);
+        if (pImage != nullptr) pImage;
+
+        Util::LoadImageFromFile(*this, path.c_str(), _images[path]);
+        return &_images[path];
     }
 
     std::pair<uint32_t, uint32_t> Engine::GetWindowSize() {

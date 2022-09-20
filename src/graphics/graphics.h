@@ -62,10 +62,12 @@ namespace Graphics {
         uint64_t GetCurrentFrame();
         void WaitIdle();
 
-        Mesh* CreateMesh(const std::string& name);
         Mesh* GetMesh(const std::string& name);
-        Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
+        AllocatedImage* GetImage(const std::string& name);
         Material* GetMaterial(const std::string& name);
+        Mesh* CreateMesh(const std::string& name);
+        AllocatedImage* CreateTexture(const std::string& name);
+        Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
         vk::Result MapMemory(vma::Allocation allocation, void **data);
         void UnmapMemory(vma::Allocation allocation);
 
@@ -76,12 +78,20 @@ namespace Graphics {
          */
         void UploadMemory(AllocatedBuffer buffer, const void * data, size_t offset, size_t size);
 
+        /**
+         * Write an image to device-local memory.
+         */
+        void UploadImage(AllocatedImage image, void * pixels);
+
         AllocatedBuffer CreateBuffer(size_t size,
             vk::BufferUsageFlags bufferUsage,
             vma::AllocationCreateFlags preferredFlags,
             vk::MemoryPropertyFlags requiredFlags,
             vma::MemoryUsage memoryUsage);
+        AllocatedImage CreateImage(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage);
+
         void DestroyBuffer(AllocatedBuffer buffer);
+
 
         Perframe* BeginFrame();
         vk::Result DrawFrame(uint32_t index, const std::vector<Renderable> &objects);
@@ -130,6 +140,7 @@ namespace Graphics {
         std::vector<vk::Semaphore> _recycledSemaphores;
         std::vector<Renderable> _renderables;
         std::unordered_map<std::string, Material> _materials;
+        std::unordered_map<std::string, AllocatedImage> _images;
         std::unordered_map<std::string, Mesh> _meshes;
 
         GPUSceneData _sceneParameters;

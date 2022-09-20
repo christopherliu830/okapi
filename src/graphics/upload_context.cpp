@@ -5,6 +5,8 @@
 namespace Graphics {
 
     void UploadContext::Init(vk::Device device, uint32_t queueIndex) {
+        _device = device;
+
         vk::Result result;
 
         vk::CommandPoolCreateInfo cmdPoolInfo {
@@ -13,7 +15,7 @@ namespace Graphics {
             queueIndex
         };
 
-        std::tie(result, commandPool) = device.createCommandPool(cmdPoolInfo);
+        std::tie(result, commandPool) = _device.createCommandPool(cmdPoolInfo);
 
         // Allocate the single command buffer for the upload pool.
         vk::CommandBufferAllocateInfo allocInfo {};
@@ -22,17 +24,31 @@ namespace Graphics {
         allocInfo.commandBufferCount = 1;
 
         std::vector<vk::CommandBuffer> cmds;
-        std::tie(result, cmds) = device.allocateCommandBuffers(allocInfo);
+        std::tie(result, cmds) = _device.allocateCommandBuffers(allocInfo);
         VK_CHECK(result);
         cmd = cmds[0];
 
-        std::tie(result, fence) = device.createFence({});
+        std::tie(result, fence) = _device.createFence({});
         VK_CHECK(result);
     }
 
-    void UploadContext::Destroy(vk::Device device) {
-        device.destroyFence(fence);
-        device.freeCommandBuffers(commandPool, cmd);
-        device.destroyCommandPool(commandPool);
+    void UploadContext::Destroy() {
+        _device.destroyFence(fence);
+        _device.freeCommandBuffers(commandPool, cmd);
+        _device.destroyCommandPool(commandPool);
+    }
+
+    void UploadContext::Begin() {
+        VK_CHECK(cmd.begin({ vk::CommandBufferUsageFlagBits::eOneTimeSubmit }));
+    }
+
+    void UploadContext::SubmitSync(vk::Queue queue) {
+        vk::SubmitInfo submitInfo { };
+        submitInfo.setCommandBuffers(cmd);
+
+        VK_CHECK(queue.submit(submitInfo, fence));
+        VK_CHECK(_device.waitForFences(fence, VK_TRUE, UINT64_MAX));
+        VK_CHECK(_device.resetFences(fence));
+        _device.resetCommandPool(commandPool, {});
     }
 }

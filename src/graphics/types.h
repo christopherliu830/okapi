@@ -14,6 +14,8 @@ namespace Graphics {
 
     struct AllocatedImage {
         vk::Image image;
+        vk::Format format;
+        vk::Extent3D extent;
         vma::Allocation allocation;
         vma::AllocationInfo allocInfo;
     };
