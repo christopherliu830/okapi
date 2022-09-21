@@ -61,8 +61,8 @@ int main(int argc, char* args[] ) {
     lostEmpire.mesh = lostEmpireMesh;
     lostEmpire.material = graphics.GetMaterial("default");
 
-    graphics.CreateTexture("assets/lost-empire/lost-empire-RGBA.png");
-    graphics.BindTexture(graphics.GetMaterial("default"), "assets/lost-empire/lost-empire-RGBA.png");
+    graphics.CreateTexture("lost-empire", "assets/lost-empire/lost-empire-RGBA.png");
+    graphics.BindTexture(graphics.GetMaterial("default"), "lost-empire");
 
     for(auto i = 0u; i < 10u; i++) {
         const auto entity = registry.create();

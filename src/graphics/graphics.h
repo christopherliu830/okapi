@@ -29,6 +29,7 @@ const std::vector<const char*> gDeviceExtensions = {
 #define SCREEN_HEIGHT 720
 
 namespace Graphics {
+    const int MAX_OBJECTS = 10000;
 
     struct Perframe {
         vk::Device device;
@@ -67,7 +68,7 @@ namespace Graphics {
         AllocatedImage* GetImage(const std::string& name);
         Material* GetMaterial(const std::string& name);
         Mesh* CreateMesh(const std::string& name);
-        Texture* CreateTexture(const std::string& name);
+        Texture* CreateTexture(const std::string& name, const std::string& path);
         void BindTexture(Material* material, const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
         vk::Result MapMemory(vma::Allocation allocation, void **data);
@@ -160,6 +161,8 @@ namespace Graphics {
         void InitLogicalDevice(const std::vector<const char *> &requiredDeviceExtensions);
         void InitSwapchain();
         void InitPerframe(Perframe &perframe, uint32_t index);
+        void InitSceneBuffer();
+        void InitDescriptorSetLayouts();
 
         /**
          * A descriptor points shaders to data from program
@@ -174,6 +177,7 @@ namespace Graphics {
 
         void CloseVulkan();
         void TeardownPerframe(Perframe &perframe);
+        void TeardownDescriptors();
         void TeardownFramebuffers();
 
         vk::Result AcquireNextImage(uint32_t *index);

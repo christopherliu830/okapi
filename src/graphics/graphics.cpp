@@ -46,6 +46,8 @@ namespace Graphics {
 
         _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
 
+        _device.destroyImageView(_depthImageView);
+
         TeardownFramebuffers();
         for(auto &perframe: _perframes) {
             TeardownPerframe(perframe);
@@ -68,13 +70,10 @@ namespace Graphics {
 
         _uploadContext.Destroy();
 
-        _device.destroyDescriptorSetLayout(_objectSetLayout);
-
-        _device.destroyDescriptorSetLayout(_globalSetLayout);
-
         _device.destroyDescriptorPool(_descriptorPool);
-
-        _device.destroyImageView(_depthImageView);
+        _device.destroyDescriptorSetLayout(_singleTextureSetLayout);
+        _device.destroyDescriptorSetLayout(_objectSetLayout);
+        _device.destroyDescriptorSetLayout(_globalSetLayout);
 
         for(auto imageView : _swapchainImageViews) {
             _device.destroyImageView(imageView);
@@ -135,6 +134,8 @@ namespace Graphics {
         InitAllocator();
         InitSwapchain();
         InitRenderPass();
+        InitSceneBuffer();
+        InitDescriptorSetLayouts();
         InitDescriptors();
         InitUploadContext();
         InitPipeline();
@@ -549,6 +550,14 @@ namespace Graphics {
             vma::MemoryUsage::eAuto
         );
 
+        perframe.objectBuffer = CreateBuffer(
+            sizeof(GPUObjectData) * MAX_OBJECTS,
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
+            {},
+            vma::MemoryUsage::eAuto
+        );
+
         perframe.device = _device;
         perframe.queueIndex = _graphicsQueueIndex;
         perframe.imageIndex = index;
@@ -579,44 +588,8 @@ namespace Graphics {
         perframe.imageIndex = -1;
     }
 
-    void Engine::InitDescriptors() {
+    void Engine::InitDescriptorSetLayouts() {
         vk::Result result;
-        const int MAX_OBJECTS = 10000;
-
-        // Create per-frame object buffer
-        for (int i = 0; i < _perframes.size(); i++) {
-            _perframes[i].objectBuffer = CreateBuffer(
-                sizeof(GPUObjectData) * MAX_OBJECTS,
-                vk::BufferUsageFlagBits::eStorageBuffer,
-                vma::AllocationCreateFlagBits::eHostAccessSequentialWrite,
-                {},
-                vma::MemoryUsage::eAuto
-            );
-        }
-
-        // Create global scene parameters buffer
-        const size_t sceneParametersBufferSize = _perframes.size() * PadUniformBufferSize(sizeof(GPUSceneData));
-        sceneParamsBuffer = CreateBuffer(
-            sceneParametersBufferSize,
-            vk::BufferUsageFlagBits::eUniformBuffer,
-            {},
-            {},
-            vma::MemoryUsage::eCpuToGpu
-        );
-
-        // Create descriptor pool
-        std::vector<vk::DescriptorPoolSize> sizes = {
-            { vk::DescriptorType::eUniformBuffer, 10 },
-            { vk::DescriptorType::eUniformBufferDynamic, 10 },
-            { vk::DescriptorType::eStorageBuffer, 10 },
-            { vk::DescriptorType::eCombinedImageSampler, 10 }
-        };
-
-        vk::DescriptorPoolCreateInfo poolInfo {{}, 10, sizes};
-
-        std::tie(result, _descriptorPool) = _device.createDescriptorPool(poolInfo);
-        VK_CHECK(result);
-
 
         // Global information descriptor set layout
         vk::DescriptorSetLayoutBinding cameraBinding {0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex};
@@ -632,6 +605,24 @@ namespace Graphics {
 
         vk::DescriptorSetLayoutBinding textureBinding {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment};
         std::tie(result, _singleTextureSetLayout) = _device.createDescriptorSetLayout({{}, textureBinding});
+        VK_CHECK(result);
+    }
+
+    void Engine::InitDescriptors() {
+        vk::Result result;
+        const int MAX_OBJECTS = 10000;
+
+        // Create descriptor pool
+        std::vector<vk::DescriptorPoolSize> sizes = {
+            { vk::DescriptorType::eUniformBuffer, 10 },
+            { vk::DescriptorType::eUniformBufferDynamic, 10 },
+            { vk::DescriptorType::eStorageBuffer, 10 },
+            { vk::DescriptorType::eCombinedImageSampler, 10 }
+        };
+
+        vk::DescriptorPoolCreateInfo poolInfo {{}, 10, sizes};
+
+        std::tie(result, _descriptorPool) = _device.createDescriptorPool(poolInfo);
         VK_CHECK(result);
 
         for(int i  = 0; i < _perframes.size(); i++) {
@@ -818,6 +809,18 @@ namespace Graphics {
         VK_CHECK(result);
     }
 
+    void Engine::InitSceneBuffer() {
+        // Create global scene parameters buffer
+        const size_t sceneParametersBufferSize = _perframes.size() * PadUniformBufferSize(sizeof(GPUSceneData));
+        sceneParamsBuffer = CreateBuffer(
+            sceneParametersBufferSize,
+            vk::BufferUsageFlagBits::eUniformBuffer,
+            {},
+            {},
+            vma::MemoryUsage::eCpuToGpu
+        );
+    }
+
     void Engine::InitFramebuffers() {
 
         for (auto &imageView : _swapchainImageViews) {
@@ -931,7 +934,6 @@ namespace Graphics {
 
         vk::Result res = Present(perframe);
 
-        // Handle Outdated error in present.
         if (res == vk::Result::eSuboptimalKHR || res == vk::Result::eErrorOutOfDateKHR)
         {
             Resize(_swapchainDimensions.width, _swapchainDimensions.height);
@@ -1071,9 +1073,13 @@ namespace Graphics {
         }
 
         VK_CHECK(_device.waitIdle());
+
+        _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
+
         TeardownFramebuffers();
         InitSwapchain();
         InitFramebuffers();
+        InitDescriptors();
     }
 
     void Engine::WaitIdle() {
@@ -1365,7 +1371,7 @@ namespace Graphics {
         return &_meshes[path];
     }
 
-    Texture* Engine::CreateTexture(const std::string &path) {
+    Texture* Engine::CreateTexture(const std::string &name, const std::string &path) {
         vk::Result result;
 
         Texture texture;
@@ -1384,9 +1390,9 @@ namespace Graphics {
         imageInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 
         std::tie(result, texture.imageView) = _device.createImageView(imageInfo);
-        _textures[path] = texture;
+        _textures[name] = texture;
 
-        return &_textures[path];
+        return &_textures[name];
     }
 
     void Engine::BindTexture(Material* material, const std::string &name) {

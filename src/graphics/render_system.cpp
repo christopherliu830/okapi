@@ -6,6 +6,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <math.h>
+#include <assert.h>
 
 float currentTime = 0;
 
