@@ -10,6 +10,7 @@ namespace Graphics {
     struct Material {
         vk::Pipeline pipeline;
         vk::PipelineLayout pipelineLayout;
+        vk::DescriptorSet textureSet {VK_NULL_HANDLE};
     };
 
     struct Renderable {

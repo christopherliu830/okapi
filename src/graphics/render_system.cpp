@@ -76,11 +76,17 @@ namespace Graphics {
                         perframe->objectDescriptor,
                         {}
                     );
+                    cmd.bindDescriptorSets(
+                        vk::PipelineBindPoint::eGraphics,
+                        obj.material->pipelineLayout,
+                        2,
+                        obj.material->textureSet,
+                        {}
+                    );
                 }
 
                 MeshPushConstants mvpMatrix;
                 mvpMatrix.renderMatrix = transform.matrix;
-                transform.matrix = glm::translate(glm::mat4 {1.0f}, glm::vec3 {sin(currentTime + index) * 4, cos(currentTime + index) * 4, 0});
 
                 cmd.pushConstants(
                     obj.material->pipelineLayout,

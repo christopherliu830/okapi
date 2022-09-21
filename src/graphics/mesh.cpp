@@ -23,7 +23,7 @@ namespace Graphics {
 
         description.bindings.push_back(mainBinding);
 
-        vk::VertexInputAttributeDescription positionAttribute{
+        vk::VertexInputAttributeDescription positionAttribute {
             0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, position)
         };
         positionAttribute.binding = 0;
@@ -31,7 +31,7 @@ namespace Graphics {
         positionAttribute.format = vk::Format::eR32G32B32Sfloat;
         positionAttribute.offset = offsetof(Vertex, position);
 
-        vk::VertexInputAttributeDescription normalAttribute{
+        vk::VertexInputAttributeDescription normalAttribute {
             1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal)
         };
         normalAttribute.binding = 0;
@@ -39,7 +39,7 @@ namespace Graphics {
         normalAttribute.format = vk::Format::eR32G32B32Sfloat;
         normalAttribute.offset = offsetof(Vertex, normal);
 
-        vk::VertexInputAttributeDescription colorAttribute{
+        vk::VertexInputAttributeDescription colorAttribute {
             2, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)
         };
         colorAttribute.binding = 0;
@@ -47,9 +47,14 @@ namespace Graphics {
         colorAttribute.format = vk::Format::eR32G32B32Sfloat;
         colorAttribute.offset = offsetof(Vertex, color);
 
+        vk::VertexInputAttributeDescription uvAttribute {
+            3, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, uv)
+        };
+
         description.attributes.push_back(positionAttribute);
         description.attributes.push_back(normalAttribute);
         description.attributes.push_back(colorAttribute);
+        description.attributes.push_back(uvAttribute);
 
         return description;
     }
@@ -138,6 +143,14 @@ namespace Graphics {
                     tinyobj::real_t red   = attrib.colors[3*size_t(idx.vertex_index)+0];
                     tinyobj::real_t green = attrib.colors[3*size_t(idx.vertex_index)+1];
                     tinyobj::real_t blue  = attrib.colors[3*size_t(idx.vertex_index)+2];
+
+                    // uv
+                    tinyobj::real_t ux = attrib.texcoords[2 * idx.texcoord_index + 0];
+                    tinyobj::real_t uy = attrib.texcoords[2 * idx.texcoord_index + 1];
+
+                    vertex.uv.x = ux;
+                    vertex.uv.y = 1 - uy; // Vulkan specific uy manipulation
+
                     m.vertices.push_back(vertex);
                 }
                 indexOffset += fv;

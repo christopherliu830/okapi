@@ -5,6 +5,7 @@
 #include <SDL2/SDL.h>
 #include "vulkan.h"
 #include "mesh.h"
+#include "texture.h"
 #include "renderable.h"
 #include "upload_context.h"
 
@@ -66,7 +67,8 @@ namespace Graphics {
         AllocatedImage* GetImage(const std::string& name);
         Material* GetMaterial(const std::string& name);
         Mesh* CreateMesh(const std::string& name);
-        AllocatedImage* CreateTexture(const std::string& name);
+        Texture* CreateTexture(const std::string& name);
+        void BindTexture(Material* material, const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
         vk::Result MapMemory(vma::Allocation allocation, void **data);
         void UnmapMemory(vma::Allocation allocation);
@@ -123,6 +125,7 @@ namespace Graphics {
         vk::Pipeline _pipeline;
         vk::DescriptorSetLayout _globalSetLayout;
         vk::DescriptorSetLayout _objectSetLayout;
+        vk::DescriptorSetLayout _singleTextureSetLayout;
         vk::DescriptorPool _descriptorPool;
         vk::CommandPool _commandPool;
         vma::Allocator _allocator; // AMD Vulkan memory allocator
@@ -140,7 +143,7 @@ namespace Graphics {
         std::vector<vk::Semaphore> _recycledSemaphores;
         std::vector<Renderable> _renderables;
         std::unordered_map<std::string, Material> _materials;
-        std::unordered_map<std::string, AllocatedImage> _images;
+        std::unordered_map<std::string, Texture> _textures;
         std::unordered_map<std::string, Mesh> _meshes;
 
         GPUSceneData _sceneParameters;

@@ -31,6 +31,12 @@ namespace Graphics {
     void Engine::CloseVulkan() {
         VK_CHECK(_device.waitIdle());
 
+        for(auto &texture : _textures) {
+            _allocator.destroyImage(texture.second.image.image, texture.second.image.allocation);
+            _device.destroyImageView(texture.second.imageView);
+        }
+        _textures.clear();
+
         for(auto &mesh : _meshes) {
             mesh.second.Destroy();
         }
@@ -602,7 +608,8 @@ namespace Graphics {
         std::vector<vk::DescriptorPoolSize> sizes = {
             { vk::DescriptorType::eUniformBuffer, 10 },
             { vk::DescriptorType::eUniformBufferDynamic, 10 },
-            { vk::DescriptorType::eStorageBuffer, 10 }
+            { vk::DescriptorType::eStorageBuffer, 10 },
+            { vk::DescriptorType::eCombinedImageSampler, 10 }
         };
 
         vk::DescriptorPoolCreateInfo poolInfo {{}, 10, sizes};
@@ -621,6 +628,10 @@ namespace Graphics {
         // Object descriptor set layout
         vk::DescriptorSetLayoutBinding objectBinding = {0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eVertex};
         std::tie(result, _objectSetLayout) = _device.createDescriptorSetLayout({{}, objectBinding});
+        VK_CHECK(result);
+
+        vk::DescriptorSetLayoutBinding textureBinding {0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment};
+        std::tie(result, _singleTextureSetLayout) = _device.createDescriptorSetLayout({{}, textureBinding});
         VK_CHECK(result);
 
         for(int i  = 0; i < _perframes.size(); i++) {
@@ -663,7 +674,7 @@ namespace Graphics {
 
 
         // Create a pipeline layout with 1 push constant.
-        vk::DescriptorSetLayout setLayouts[] = {_globalSetLayout, _objectSetLayout};
+        vk::DescriptorSetLayout setLayouts[] = {_globalSetLayout, _objectSetLayout, _singleTextureSetLayout};
         std::tie(result, _pipelineLayout) = _device.createPipelineLayout({{}, setLayouts, pushConstant});
         VK_CHECK(result);
 
@@ -726,7 +737,6 @@ namespace Graphics {
         builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eVertex, vertShader, "main"});
         builder.AddShaderModule({{}, vk::ShaderStageFlagBits::eFragment, fragShader, "main"});
 
-
         std::tie(result, _pipeline) = builder.Build(_device, _renderPass);
         VK_CHECK(result);
 
@@ -734,7 +744,7 @@ namespace Graphics {
         _device.destroyShaderModule(fragShader);
         builder.FlushShaderModules();
 
-        CreateMaterial(_pipeline, _pipelineLayout, "defaultMesh");
+        CreateMaterial(_pipeline, _pipelineLayout, "default");
     }
 
     void Engine::InitRenderPass() {
@@ -1117,7 +1127,7 @@ namespace Graphics {
         vk::ImageCreateInfo imageInfo {
             {},
             vk::ImageType::e2D,
-            vk::Format::eR8G8B8Srgb,
+            format,
             extent,
             1,
             1,
@@ -1268,16 +1278,20 @@ namespace Graphics {
 
         memcpy(stagingBuffer.allocInfo.pMappedData, pixels, static_cast<size_t>(imageSize));
 
-        vk::BufferImageCopy copyRegion {0, 0, 0, {{}, 0, 0, 1}, {}, image.extent};
+        vk::BufferImageCopy copyRegion {0, 0, 0, {vk::ImageAspectFlagBits::eColor, 0, 0, 1}, {}, image.extent};
 
-        _uploadContext.cmd.copyBufferToImage(stagingBuffer.buffer, image.image, vk::ImageLayout::eTransferDstOptimal, {0, 0, 0});
+        _uploadContext.cmd.copyBufferToImage(stagingBuffer.buffer, image.image, vk::ImageLayout::eTransferDstOptimal, copyRegion);
 
         // Specify the image transformation to occur between the sides of the pipeline barrier.
-        vk::ImageMemoryBarrier imageBarrierToShader {
+        vk::ImageMemoryBarrier imageBarrierToReadable {
             vk::AccessFlagBits::eTransferWrite,
             vk::AccessFlagBits::eShaderRead,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
+            {},
+            {},
+            image.image,
+            range
         };
 
         _uploadContext.cmd.pipelineBarrier(
@@ -1286,8 +1300,10 @@ namespace Graphics {
             {},
             {},
             {},
-            imageBarrierToShader
+            imageBarrierToReadable
         );
+
+        VK_CHECK(_uploadContext.cmd.end());
 
         _uploadContext.SubmitSync(_queue);
     }
@@ -1303,16 +1319,6 @@ namespace Graphics {
         } else {
             return &(*it).second;
         }
-    }
-
-    AllocatedImage* Engine::GetImage(const std::string &name) {
-        auto it = _images.find(name);
-        if (it == _images.end()) {
-            return nullptr;
-        } else {
-            return &(*it).second;
-        }
-
     }
 
     void Engine::DrawObjects(vk::CommandBuffer cmd, const Renderable* first, size_t count) {
@@ -1357,12 +1363,47 @@ namespace Graphics {
         return &_meshes[path];
     }
 
-    AllocatedImage* Engine::CreateTexture(const std::string &path) {
-        AllocatedImage* pImage = GetImage(path);
-        if (pImage != nullptr) pImage;
+    Texture* Engine::CreateTexture(const std::string &path) {
+        vk::Result result;
 
-        Util::LoadImageFromFile(*this, path.c_str(), _images[path]);
-        return &_images[path];
+        Texture texture;
+
+        Util::LoadImageFromFile(*this, path.c_str(), texture.image);
+
+        vk::ImageViewCreateInfo imageInfo {
+            {},
+            texture.image.image,
+            vk::ImageViewType::e2D,
+            vk::Format::eR8G8B8A8Srgb
+        };
+
+        imageInfo.subresourceRange.levelCount = 1;
+        imageInfo.subresourceRange.layerCount = 1;
+        imageInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+
+        std::tie(result, texture.imageView) = _device.createImageView(imageInfo);
+        _textures[path] = texture;
+
+        return &_textures[path];
+    }
+
+    void Engine::BindTexture(Material* material, const std::string &name) {
+        vk::Result result;
+
+        vk::SamplerCreateInfo samplerCreateInfo {};
+
+        vk::Sampler sampler;
+        std::tie(result, sampler) = _device.createSampler(samplerCreateInfo);
+        VK_CHECK(result);
+
+        std::vector<vk::DescriptorSet> descriptors;
+        std::tie(result, descriptors) = _device.allocateDescriptorSets({_descriptorPool, _singleTextureSetLayout});
+        VK_CHECK(result);
+        material->textureSet = descriptors[0];
+
+        vk::DescriptorImageInfo imageBufferInfo { sampler, _textures[name].imageView, vk::ImageLayout::eShaderReadOnlyOptimal };
+        vk::WriteDescriptorSet texture { material->textureSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, imageBufferInfo };
+        _device.updateDescriptorSets(texture, {});
     }
 
     std::pair<uint32_t, uint32_t> Engine::GetWindowSize() {

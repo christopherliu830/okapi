@@ -5,6 +5,7 @@
 
 #include "texture.h"
 #include "logging.h"
+#include "graphics.h"
 
 namespace Graphics::Util {
 
@@ -23,6 +24,8 @@ namespace Graphics::Util {
 
         AllocatedImage image = engine.CreateImage(imageFormat, imageExtent, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst);
         engine.UploadImage(image, pixels);
+
+        outImage = image;
 
         stbi_image_free(pixels);
         return true;

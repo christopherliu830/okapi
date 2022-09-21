@@ -1,12 +1,19 @@
 #pragma once
 
-#include "graphics.h"
 #include "types.h"
 
-namespace Graphics::Util {
+namespace Graphics {
+    class Engine;
 
-    /**
-     * Load a texture. Remember to delete!
-     */
-    bool LoadImageFromFile(Engine& engine, const char * file, AllocatedImage& outImage);
+    namespace Util {
+        /**
+         * Load a texture. Remember to delete!
+         */
+        bool LoadImageFromFile(Engine& engine, const char * file, AllocatedImage& outImage);
+    }
+
+    struct Texture {
+        AllocatedImage image;
+        vk::ImageView imageView;
+    };
 };
