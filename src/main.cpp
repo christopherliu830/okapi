@@ -2,6 +2,7 @@
 #include "graphics/graphics.h"
 #include "graphics/render_system.h"
 #include "graphics/renderable.h"
+#include "gui/gui.h"
 #include "logging.h"
 #include <entt/entt.hpp>
 #include <string>

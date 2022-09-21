@@ -1306,6 +1306,8 @@ namespace Graphics {
         VK_CHECK(_uploadContext.cmd.end());
 
         _uploadContext.SubmitSync(_queue);
+
+        DestroyBuffer(stagingBuffer);
     }
 
     void Engine::DestroyBuffer(AllocatedBuffer buffer) {

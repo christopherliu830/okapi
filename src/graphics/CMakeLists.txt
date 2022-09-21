@@ -1,4 +1,3 @@
-
 target_sources(${PROJECT_NAME} PRIVATE
   graphics.cpp
   graphics.h
@@ -17,4 +16,5 @@ target_sources(${PROJECT_NAME} PRIVATE
   util.h
   vulkan.h
 )
+
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
