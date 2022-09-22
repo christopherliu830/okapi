@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "okapi",
+  "version": "0.1.0",
+  "dependencies": [
+    "sdl2",
+    "glm",
+    "vulkan",
+    { 
+      "name": "imgui",
+      "features": ["sdl2-binding", "vulkan-binding"]
+    }
+  ]
+}

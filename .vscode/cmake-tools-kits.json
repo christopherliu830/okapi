@@ -45,6 +45,6 @@
       "platform": "x64",
       "toolset": "host=x86"
     },
-    "toolchainFile": "C:\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
+    "toolchainFile": "vcpkg\\scripts\\buildsystems\\vcpkg.cmake"
   }
 ]
