@@ -1,10 +1,14 @@
 #include "gui.h"
+#include "graphics/vulkan.h"
 
 namespace Gui {
 
-    void Gui::Init() {
-        ImGui::CreateContext();
+    void GuiSystem::Init() {
     };
 
+    void GuiSystem::Render() {
+        ImGui::Render();
+        
+    }
 
 };

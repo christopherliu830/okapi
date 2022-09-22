@@ -49,7 +49,6 @@ int main(int argc, char* args[] ) {
     Graphics::RenderSystem rs {&graphics};
     entt::registry registry;
     GravitySystem gs;
-    SDL_Event e;
 
     Graphics::Mesh* monkeyMesh = graphics.CreateMesh("assets/Monkey/Monkey.obj");
     Graphics::Renderable monkey;
@@ -74,12 +73,21 @@ int main(int argc, char* args[] ) {
     registry.emplace<Transform>(entity, glm::translate(glm::mat4 {1.0f}, glm::vec3 {5, -15, 0}));
     registry.emplace<Graphics::Renderable>(entity, lostEmpire);
 
+    SDL_Event e;
     while (!quit) {
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) {
                 quit = true;
             }
+
+            ImGui_ImplSDL2_ProcessEvent(&e);
         }
+
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL2_NewFrame(graphics.window);
+        ImGui::NewFrame();
+        ImGui::ShowDemoWindow();
+
         gs.Update(registry, 0);
         rs.Update(registry, 0);
         SDL_Delay((int)(1.f/60.f*1000.f));

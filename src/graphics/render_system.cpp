@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <math.h>
 #include <assert.h>
+#include "gui/gui.h"
 
 float currentTime = 0;
 
@@ -38,6 +39,8 @@ namespace Graphics {
         sceneData.ambientColor = glm::vec4 {x, y, z, 1};
 
         if (perframe) {
+            ImGui::Render();
+
             vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
 
             // Map buffers
@@ -104,6 +107,9 @@ namespace Graphics {
                 cmd.draw(static_cast<uint32_t>(obj.mesh->vertices.size()), 1, 0, index);
                 index += 1;
             }
+
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+
             _engine->EndFrame(perframe);
             currentTime += 0.01f;
         }

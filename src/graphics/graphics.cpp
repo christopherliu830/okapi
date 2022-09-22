@@ -14,6 +14,9 @@
 #include <SDL2/SDL_vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
+#include <imgui.h>
+#include <imgui_impl_sdl.h>
+#include <imgui_impl_vulkan.h>
 
 #if ( VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1 )
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -24,12 +27,16 @@ namespace Graphics {
 
     Engine::~Engine() {
         CloseVulkan();
-        SDL_DestroyWindow(_window);
+        SDL_DestroyWindow(window);
         SDL_Quit();
     }
 
     void Engine::CloseVulkan() {
         VK_CHECK(_device.waitIdle());
+
+        // Destroy GUI
+        _device.destroyDescriptorPool(_imguiPool);
+        ImGui_ImplVulkan_Shutdown();
 
         for(auto &texture : _textures) {
             _allocator.destroyImage(texture.second.image.image, texture.second.image.allocation);
@@ -102,19 +109,20 @@ namespace Graphics {
             LOGE("Could not intialize sdl2: {}", SDL_GetError());
         }
 
-        _window = SDL_CreateWindow(
+        window = SDL_CreateWindow(
             "Space Crawler 0.1.0",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             SCREEN_WIDTH, SCREEN_HEIGHT,
             SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
         );
 
-        if (_window == NULL) {
+        if (window == NULL) {
             fprintf(stderr, "Could not create window: %s\n", SDL_GetError());
             assert(0);
         }
 
         InitVulkan();
+        InitGui();
     }
 
     void Engine::InitVulkan() {
@@ -305,10 +313,58 @@ namespace Graphics {
 #if defined(VK_USE_PLATFORM_METAL_EXT)
         LOGI("Using Metal");
 #endif
-        if(SDL_Vulkan_CreateSurface(_window, _instance, (VkSurfaceKHR *)(&_surface)) != SDL_TRUE) {
+        if(SDL_Vulkan_CreateSurface(window, _instance, (VkSurfaceKHR *)(&_surface)) != SDL_TRUE) {
             LOGE(SDL_GetError());
             assert(0);
         }
+    }
+
+    void Engine::InitGui() {
+        vk::DescriptorPoolSize poolSizes[] {
+            { vk::DescriptorType::eSampler, 1000 },
+            { vk::DescriptorType::eCombinedImageSampler, 1000},
+            { vk::DescriptorType::eSampledImage, 1000},
+            { vk::DescriptorType::eStorageImage, 1000},
+            { vk::DescriptorType::eUniformTexelBuffer, 1000},
+            { vk::DescriptorType::eStorageTexelBuffer, 1000},
+            { vk::DescriptorType::eUniformBuffer, 1000},
+            { vk::DescriptorType::eStorageBuffer, 1000},
+            { vk::DescriptorType::eUniformBufferDynamic, 1000},
+            { vk::DescriptorType::eStorageBufferDynamic, 1000},
+            { vk::DescriptorType::eInputAttachment, 1000},
+        };
+
+        vk::Result result;
+        std::tie(result, _imguiPool) = _device.createDescriptorPool({{}, 1000, poolSizes});
+        VK_CHECK(result);
+
+        ImGui::CreateContext();
+
+        ImGui_ImplSDL2_InitForVulkan(window);
+
+        ImGui_ImplVulkan_InitInfo initInfo {
+            _instance, 
+            _physicalDevice,
+            _device,
+            {},
+            _queue,
+            {},
+            _imguiPool,
+            {},
+            3,
+            3,
+            VK_SAMPLE_COUNT_1_BIT
+        };
+
+        ImGui_ImplVulkan_Init(&initInfo, _renderPass);
+
+        _uploadContext.Begin();
+
+        ImGui_ImplVulkan_CreateFontsTexture(_uploadContext.cmd);
+
+        _uploadContext.SubmitSync(_queue);
+
+        ImGui_ImplVulkan_DestroyFontUploadObjects();
     }
 
     void Engine::InitSwapchain() {
@@ -496,7 +552,7 @@ namespace Graphics {
             return capabilities.currentExtent;
         } else {
             int width, height;
-            SDL_Vulkan_GetDrawableSize(_window, &width, &height);
+            SDL_Vulkan_GetDrawableSize(window, &width, &height);
             VkExtent2D actualExtent = {
                 static_cast<uint32_t>(width),
                 static_cast<uint32_t>(height)
@@ -1238,8 +1294,6 @@ namespace Graphics {
             vk::BufferCopy bufCopy = { 0, 0, size };
             _uploadContext.cmd.copyBuffer(stagingBuf.buffer, buffer.buffer, 1, &bufCopy);
 
-            VK_CHECK(_uploadContext.cmd.end());
-
             _uploadContext.SubmitSync(_queue);
 
             _allocator.destroyBuffer(stagingBuf.buffer, stagingBuf.allocation);
@@ -1308,8 +1362,6 @@ namespace Graphics {
             {},
             imageBarrierToReadable
         );
-
-        VK_CHECK(_uploadContext.cmd.end());
 
         _uploadContext.SubmitSync(_queue);
 

@@ -46,6 +46,8 @@ namespace Graphics {
         vk::SubmitInfo submitInfo { };
         submitInfo.setCommandBuffers(cmd);
 
+        VK_CHECK(cmd.end());
+
         VK_CHECK(queue.submit(submitInfo, fence));
         VK_CHECK(_device.waitForFences(fence, VK_TRUE, UINT64_MAX));
         VK_CHECK(_device.resetFences(fence));

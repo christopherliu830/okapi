@@ -56,6 +56,7 @@ namespace Graphics {
 
     public:
         AllocatedBuffer sceneParamsBuffer;
+        SDL_Window* window;
 
         Engine();
         ~Engine();
@@ -71,6 +72,7 @@ namespace Graphics {
         Texture* CreateTexture(const std::string& name, const std::string& path);
         void BindTexture(Material* material, const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
+        void InitGui();
         vk::Result MapMemory(vma::Allocation allocation, void **data);
         void UnmapMemory(vma::Allocation allocation);
 
@@ -107,7 +109,6 @@ namespace Graphics {
 
         uint64_t _currentFrame = 0;
 
-        SDL_Window* _window;
         vk::Instance _instance;
 #ifndef NDEBUG
         vk::DebugUtilsMessengerEXT _debugMessenger;
@@ -128,6 +129,7 @@ namespace Graphics {
         vk::DescriptorSetLayout _objectSetLayout;
         vk::DescriptorSetLayout _singleTextureSetLayout;
         vk::DescriptorPool _descriptorPool;
+        vk::DescriptorPool _imguiPool;
         vk::CommandPool _commandPool;
         vma::Allocator _allocator; // AMD Vulkan memory allocator
 
