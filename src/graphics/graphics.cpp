@@ -966,6 +966,107 @@ namespace Graphics {
         return &_perframes[index];
     }
 
+    void Engine::BeginRenderPass() {
+        auto cmd = currentPerframe->primaryCommandBuffer;
+
+        vk::ClearValue clearValue;
+        clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
+
+        vk::ClearValue depthClear;
+        depthClear.depthStencil.depth = 1.f;
+
+        std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
+
+        vk::RenderPassBeginInfo rpBeginInfo {
+            _renderPass, _swapchainFramebuffers[currentPerframe->perframeIndex],
+            {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
+            clearValues
+        };
+
+        cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
+
+        vk::Viewport vp {
+            0.0f, 0.0f, 
+            static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
+            0.0f, 0.1f
+        };
+        cmd.setViewport(0, vp);
+
+        vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
+        cmd.setScissor(0, scissor);
+    }
+
+    void Engine::EndRenderPass() {
+        currentPerframe->primaryCommandBuffer.endRenderPass();
+    }
+
+    // Returns nullptr if the frame isn't ready yet
+    Perframe* Engine::BeginFrame2() {
+        currentPerframe = nullptr;
+
+        uint32_t index;
+        vk::Result res = AcquireNextImage(&index);
+
+        switch(res) {
+            case vk::Result::eSuboptimalKHR:
+            case vk::Result::eErrorOutOfDateKHR:
+                Resize(_swapchainDimensions.width, _swapchainDimensions.height);
+                return nullptr;
+            case vk::Result::eSuccess:
+                break;
+            default:
+                return nullptr;
+        }
+
+        // Begin render pass
+        auto cmd = _perframes[index].primaryCommandBuffer;
+
+        vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
+        VK_CHECK(cmd.begin(beginInfo));
+
+        currentPerframe = &_perframes[index];
+        return currentPerframe;
+    }
+
+    void Engine::Render() {
+        auto perframe = currentPerframe;
+        auto cmd = perframe->primaryCommandBuffer;
+
+        VK_CHECK(cmd.end());
+
+        // If the perframe release semaphore wasn't created yet, initialize it now.
+        if (!perframe->swapchainReleaseSemaphore) {
+            vk::Result result;
+            std::tie(result, perframe->swapchainReleaseSemaphore) = _device.createSemaphore({});
+            VK_CHECK(result);
+        }
+
+        vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+        vk::SubmitInfo info {
+            perframe->swapchainAcquireSemaphore,
+            waitStage,
+            perframe->primaryCommandBuffer,
+            perframe->swapchainReleaseSemaphore
+        };
+
+        VK_CHECK(_queue.submit(info, perframe->queueSubmitFence));
+
+        vk::Result res = Present(perframe);
+
+        if (res == vk::Result::eSuboptimalKHR || res == vk::Result::eErrorOutOfDateKHR)
+        {
+            Resize(_swapchainDimensions.width, _swapchainDimensions.height);
+        }
+        else if (res != vk::Result::eSuccess)
+        {
+            LOGE("Failed to present swapchain image.");
+            VK_CHECK(res);
+        }
+
+        _currentFrame++;
+    }
+
     void Engine::EndFrame(Perframe* perframe) {
         auto cmd = perframe->primaryCommandBuffer;
 

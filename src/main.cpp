@@ -88,10 +88,14 @@ int main(int argc, char* args[] ) {
             gui.PollEvents(e);
         }
 
+
+        graphics.BeginFrame2();
         gui.BeginFrame();
 
         gravitySystem.Update(registry, 0);
         renderSystem.Update(registry, 0);
+
+        graphics.Render();
         SDL_Delay((int)(1.f/60.f*1000.f));
     }
 

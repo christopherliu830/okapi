@@ -14,7 +14,7 @@ float currentTime = 0;
 namespace Graphics {
     void RenderSystem::Update(entt::registry &registry, float deltaTime) {
         auto view = registry.view<Transform, Renderable>();
-        Perframe* perframe = _engine->BeginFrame();
+        Perframe* perframe = _engine->currentPerframe;
 
         auto [width, height] = _engine->GetWindowSize();
         glm::vec3 cameraPos {0.f, 0.f, -10.f};
@@ -42,6 +42,8 @@ namespace Graphics {
             ImGui::Render();
 
             vk::CommandBuffer cmd = perframe->primaryCommandBuffer;
+
+            _engine->BeginRenderPass();
 
             // Map buffers
             _engine->UploadMemory(perframe->cameraBuffer, &camData, 0, sizeof(GPUCameraData));
@@ -110,7 +112,7 @@ namespace Graphics {
 
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 
-            _engine->EndFrame(perframe);
+            _engine->EndRenderPass();
             currentTime += 0.01f;
         }
     }

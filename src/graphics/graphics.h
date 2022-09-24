@@ -57,6 +57,7 @@ namespace Graphics {
     public:
         AllocatedBuffer sceneParamsBuffer;
         SDL_Window* window;
+        Perframe* currentPerframe;
 
         Engine();
         ~Engine();
@@ -99,9 +100,13 @@ namespace Graphics {
 
 
         Perframe* BeginFrame();
-        vk::Result DrawFrame(uint32_t index, const std::vector<Renderable> &objects);
+        Perframe* BeginFrame2();
+        void BeginRenderPass();
+        void EndRenderPass();
+        Perframe* CurrentFrame();
         void DrawObjects(vk::CommandBuffer cmd, const Renderable* first, size_t count);
         void EndFrame(Perframe *perframe);
+        void Render();
         std::pair<uint32_t, uint32_t> GetWindowSize();
         size_t PadUniformBufferSize(size_t originalSize);
 
