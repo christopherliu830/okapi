@@ -84,7 +84,7 @@ namespace Graphics {
                         vk::PipelineBindPoint::eGraphics,
                         obj.material->pipelineLayout,
                         2,
-                        obj.material->textureSet,
+                        obj.material->textureDescriptor,
                         {}
                     );
                 }

@@ -15,5 +15,6 @@ namespace Graphics {
     struct Texture {
         AllocatedImage image;
         vk::ImageView imageView;
+        vk::Sampler sampler;
     };
 };

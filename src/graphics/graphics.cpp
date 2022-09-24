@@ -41,6 +41,7 @@ namespace Graphics {
         for(auto &texture : _textures) {
             _allocator.destroyImage(texture.second.image.image, texture.second.image.allocation);
             _device.destroyImageView(texture.second.imageView);
+            _device.destroySampler(texture.second.sampler);
         }
         _textures.clear();
 
@@ -1442,6 +1443,11 @@ namespace Graphics {
         imageInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 
         std::tie(result, texture.imageView) = _device.createImageView(imageInfo);
+        VK_CHECK(result);
+
+        std::tie(result, texture.sampler) = _device.createSampler({});
+        VK_CHECK(result);
+
         _textures[name] = texture;
 
         return &_textures[name];
@@ -1449,21 +1455,16 @@ namespace Graphics {
 
     void Engine::BindTexture(Material* material, const std::string &name) {
         vk::Result result;
-
-        vk::SamplerCreateInfo samplerCreateInfo {};
-
-        vk::Sampler sampler;
-        std::tie(result, sampler) = _device.createSampler(samplerCreateInfo);
-        VK_CHECK(result);
+        Texture* texture = &_textures[name];
 
         std::vector<vk::DescriptorSet> descriptors;
         std::tie(result, descriptors) = _device.allocateDescriptorSets({_descriptorPool, _singleTextureSetLayout});
         VK_CHECK(result);
-        material->textureSet = descriptors[0];
+        material->textureDescriptor = descriptors[0];
 
-        vk::DescriptorImageInfo imageBufferInfo { sampler, _textures[name].imageView, vk::ImageLayout::eShaderReadOnlyOptimal };
-        vk::WriteDescriptorSet texture { material->textureSet, 0, 0, vk::DescriptorType::eCombinedImageSampler, imageBufferInfo };
-        _device.updateDescriptorSets(texture, {});
+        vk::DescriptorImageInfo imageBufferInfo { texture->sampler, texture->imageView, vk::ImageLayout::eShaderReadOnlyOptimal };
+        vk::WriteDescriptorSet writeTextureDescriptor { material->textureDescriptor, 0, 0, vk::DescriptorType::eCombinedImageSampler, imageBufferInfo };
+        _device.updateDescriptorSets(writeTextureDescriptor, {});
     }
 
     std::pair<uint32_t, uint32_t> Engine::GetWindowSize() {
