@@ -49,7 +49,7 @@ namespace Graphics {
         /**
          * Index of the Perframe in the engine's array.
          */
-        uint32_t imageIndex;
+        uint32_t perframeIndex;
     };
 
     class Engine {

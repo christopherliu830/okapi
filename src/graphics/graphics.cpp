@@ -617,7 +617,7 @@ namespace Graphics {
 
         perframe.device = _device;
         perframe.queueIndex = _graphicsQueueIndex;
-        perframe.imageIndex = index;
+        perframe.perframeIndex = index;
     }
 
     void Engine::TeardownPerframe(Perframe &perframe) {
@@ -642,7 +642,7 @@ namespace Graphics {
 
         perframe.device = nullptr;
         perframe.queueIndex = -1;
-        perframe.imageIndex = -1;
+        perframe.perframeIndex = -1;
     }
 
     void Engine::InitDescriptorSetLayouts() {
@@ -1108,7 +1108,7 @@ namespace Graphics {
 
     vk::Result Engine::Present(Perframe *perframe) {
         vk::PresentInfoKHR present {
-            perframe->swapchainReleaseSemaphore, _swapchain, perframe->imageIndex
+            perframe->swapchainReleaseSemaphore, _swapchain, perframe->perframeIndex
         };
         // Avoid assertion failure on result because we want to
         // bypass assert check on vk::Result::eOutdated and handle manually

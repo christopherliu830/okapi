@@ -48,15 +48,15 @@ namespace Graphics {
             _engine->UploadMemory(
                 _engine->sceneParamsBuffer,
                 &sceneData,
-                _engine->PadUniformBufferSize(sizeof(GPUSceneData)) * perframe->imageIndex,
+                _engine->PadUniformBufferSize(sizeof(GPUSceneData)) * perframe->perframeIndex,
                 sizeof(GPUSceneData)
             );
 
             Mesh* lastMesh = nullptr;
             Material* lastMaterial = nullptr;
 
-            assert(perframe->imageIndex < UINT_MAX); // Just in case, should never have so many frames
-            uint32_t uniformOffset = static_cast<unsigned int>(_engine->PadUniformBufferSize(sizeof(GPUSceneData)) * perframe->imageIndex);
+            assert(perframe->perframeIndex < UINT_MAX); // Just in case, should never have so many frames
+            uint32_t uniformOffset = static_cast<unsigned int>(_engine->PadUniformBufferSize(sizeof(GPUSceneData)) * perframe->perframeIndex);
 
             int index = 0;
             for(auto [entity, transform, obj]: view.each()) {
