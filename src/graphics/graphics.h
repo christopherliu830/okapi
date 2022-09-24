@@ -97,10 +97,10 @@ namespace Graphics {
         AllocatedImage CreateImage(vk::Format format, vk::Extent3D extent, vk::ImageUsageFlags usage);
 
         void DestroyBuffer(AllocatedBuffer buffer);
+        void DestroyDescriptorPool(vk::DescriptorPool descriptorPool);
 
 
         Perframe* BeginFrame();
-        Perframe* BeginFrame2();
         void BeginRenderPass();
         void EndRenderPass();
         Perframe* CurrentFrame();

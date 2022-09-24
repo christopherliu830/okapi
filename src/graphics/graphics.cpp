@@ -915,57 +915,6 @@ namespace Graphics {
 
     }
 
-    // Returns nullptr if the frame isn't ready yet
-    Perframe* Engine::BeginFrame() {
-        uint32_t index;
-        vk::Result res = AcquireNextImage(&index);
-
-        switch(res) {
-            case vk::Result::eSuboptimalKHR:
-            case vk::Result::eErrorOutOfDateKHR:
-                Resize(_swapchainDimensions.width, _swapchainDimensions.height);
-                return nullptr;
-            case vk::Result::eSuccess:
-                break;
-            default:
-                return nullptr;
-        }
-
-        // Begin render pass
-        auto cmd = _perframes[index].primaryCommandBuffer;
-
-        vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
-        VK_CHECK(cmd.begin(beginInfo));
-
-        vk::ClearValue clearValue;
-        clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
-
-        vk::ClearValue depthClear;
-        depthClear.depthStencil.depth = 1.f;
-
-        std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
-
-        vk::RenderPassBeginInfo rpBeginInfo {
-            _renderPass, _swapchainFramebuffers[index],
-            {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
-            clearValues
-        };
-
-        cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
-
-        vk::Viewport vp {
-            0.0f, 0.0f, 
-            static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
-            0.0f, 0.1f
-        };
-        cmd.setViewport(0, vp);
-
-        vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
-        cmd.setScissor(0, scissor);
-
-        return &_perframes[index];
-    }
-
     void Engine::BeginRenderPass() {
         auto cmd = currentPerframe->primaryCommandBuffer;
 
@@ -1001,7 +950,7 @@ namespace Graphics {
     }
 
     // Returns nullptr if the frame isn't ready yet
-    Perframe* Engine::BeginFrame2() {
+    Perframe* Engine::BeginFrame() {
         currentPerframe = nullptr;
 
         uint32_t index;
@@ -1025,12 +974,17 @@ namespace Graphics {
         VK_CHECK(cmd.begin(beginInfo));
 
         currentPerframe = &_perframes[index];
+
+        BeginRenderPass();
+
         return currentPerframe;
     }
 
     void Engine::Render() {
         auto perframe = currentPerframe;
         auto cmd = perframe->primaryCommandBuffer;
+
+        EndRenderPass();
 
         VK_CHECK(cmd.end());
 

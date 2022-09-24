@@ -1,7 +1,6 @@
 #include "gui.h"
 #include "graphics/vulkan.h"
 
-
 namespace Gui {
 
     void Gui::Init() {
@@ -9,6 +8,7 @@ namespace Gui {
 
     void Gui::Render() {
         ImGui::Render();
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), _engine.currentPerframe->primaryCommandBuffer);
     }
 
     void Gui::PollEvents(const SDL_Event &event) {
