@@ -47,7 +47,7 @@ int main(int argc, char* args[] ) {
     bool quit = false;
     Graphics::Engine graphics;
     Graphics::RenderSystem renderSystem {&graphics};
-    Gui::Gui gui {&graphics};
+    Gui::Gui gui {graphics};
 
     entt::registry registry;
     GravitySystem gravitySystem;

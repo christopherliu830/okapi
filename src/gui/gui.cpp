@@ -17,7 +17,7 @@ namespace Gui {
 
     void Gui::BeginFrame() {
         ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplSDL2_NewFrame(_engine->window);
+        ImGui_ImplSDL2_NewFrame(_engine.window);
         ImGui::NewFrame();
         ImGui::ShowDemoWindow();
     }

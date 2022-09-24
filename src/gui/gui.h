@@ -13,7 +13,7 @@ namespace Gui {
     class Gui {
 
     public:
-        Gui(Graphics::Engine* engine) : _engine{engine} {};
+        Gui(Graphics::Engine& engine) : _engine{engine} {};
 
         void Init();
         void Render();
@@ -21,6 +21,6 @@ namespace Gui {
         void PollEvents(const SDL_Event &event);
     
     private:
-        Graphics::Engine* _engine;
+        Graphics::Engine& _engine;
     };
 };
