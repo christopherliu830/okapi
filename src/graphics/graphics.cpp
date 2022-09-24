@@ -1051,61 +1051,6 @@ namespace Graphics {
         return vk::Result::eSuccess;
     }
 
-    vk::Result Engine::DrawFrame(uint32_t index, const std::vector<Renderable> &objects) {
-        auto fb = _swapchainFramebuffers[index];
-        auto cmd = _perframes[index].primaryCommandBuffer;
-
-        vk::CommandBufferBeginInfo beginInfo {vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
-        VK_CHECK(cmd.begin(beginInfo));
-
-        vk::ClearValue clearValue;
-        clearValue.color = vk::ClearColorValue(std::array<float, 4>({{0.1f, 0.1f, 0.2f, 1.0f}}));
-
-        vk::ClearValue depthClear;
-        depthClear.depthStencil.depth = 1.f;
-
-        std::array<vk::ClearValue, 2> clearValues = {clearValue, depthClear};
-
-        vk::RenderPassBeginInfo rpBeginInfo {
-            _renderPass, fb, {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}},
-            clearValues
-        };
-
-        cmd.beginRenderPass(rpBeginInfo, vk::SubpassContents::eInline);
-
-        vk::Viewport vp {
-            0.0f, 0.0f, 
-            static_cast<float>(_swapchainDimensions.width), static_cast<float>(_swapchainDimensions.height),
-            0.0f, 0.1f
-        };
-        cmd.setViewport(0, vp);
-
-        vk::Rect2D scissor {{0, 0}, {_swapchainDimensions.width, _swapchainDimensions.height}};
-        cmd.setScissor(0, scissor);
-
-        DrawObjects(cmd, objects.data(), objects.size());
-
-        cmd.endRenderPass();
-
-        VK_CHECK(cmd.end());
-
-        if (!_perframes[index].swapchainReleaseSemaphore) {
-            vk::Result result;
-            std::tie(result, _perframes[index].swapchainReleaseSemaphore) = _device.createSemaphore({});
-            VK_CHECK(result);
-        }
-
-        vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-
-        vk::SubmitInfo info {
-            _perframes[index].swapchainAcquireSemaphore,
-            waitStage, cmd,
-            _perframes[index].swapchainReleaseSemaphore
-        };
-
-        return _queue.submit(info, _perframes[index].queueSubmitFence);
-    }
-
     vk::Result Engine::Present(Perframe *perframe) {
         vk::PresentInfoKHR present {
             perframe->swapchainReleaseSemaphore, _swapchain, perframe->perframeIndex
