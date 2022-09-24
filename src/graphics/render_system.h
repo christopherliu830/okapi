@@ -10,7 +10,7 @@ namespace Graphics {
     class RenderSystem : EntitySystem {
 
     public:
-        RenderSystem(Engine* engine): _engine{engine} {};
+        RenderSystem(Engine& engine): _engine{engine} {};
         void Update(entt::registry &registry, float deltaTime = 0) override;
 
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
@@ -18,7 +18,7 @@ namespace Graphics {
         Mesh* GetMesh(const std::string& name);
 
     private:
-        Engine* _engine;
+        Engine& _engine;
         std::vector<Renderable> _renderables;
         std::unordered_map<std::string, Material> _materials;
         std::unordered_map<std::string, Mesh> _meshes;
