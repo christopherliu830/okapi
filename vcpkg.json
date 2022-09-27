@@ -6,6 +6,8 @@
     "sdl2",
     "glm",
     "vulkan",
+    "entt",
+    "spdlog",
     { 
       "name": "imgui",
       "features": ["sdl2-binding", "vulkan-binding"]

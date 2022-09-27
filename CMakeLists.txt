@@ -14,6 +14,8 @@ find_package(SDL2 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(entt CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 # spdlog dependency
 include(ExternalProject)
@@ -31,8 +33,6 @@ ExternalProject_Add(spdlog
 add_executable(${PROJECT_NAME} 
   src/main.cpp
 )
-
-add_subdirectory(lib/entt)
 
 add_subdirectory(src/graphics)
 add_subdirectory(src/gui)
