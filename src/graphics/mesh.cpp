@@ -6,10 +6,6 @@
 
 namespace Graphics {
 
-    glm::vec3 Vertex::GetColor() {
-        return color;
-    }
-
     VertexInputDescription Vertex::GetInputDescription() {
         VertexInputDescription description;
 
