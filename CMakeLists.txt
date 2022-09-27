@@ -36,6 +36,7 @@ add_subdirectory(lib/entt)
 
 add_subdirectory(src/graphics)
 add_subdirectory(src/gui)
+add_subdirectory(src/primitives)
 
 add_dependencies(${PROJECT_NAME} spdlog)
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2::SDL2main)

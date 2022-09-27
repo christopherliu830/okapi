@@ -46,6 +46,7 @@ namespace Graphics {
         _textures.clear();
 
         for(auto &mesh : _meshes) {
+            _allocator.destroyBuffer(mesh.second.vertexBuffer.buffer, mesh.second.vertexBuffer.allocation);
             mesh.second.Destroy();
         }
         _meshes.clear();
@@ -1418,10 +1419,29 @@ namespace Graphics {
         Mesh* pMesh = GetMesh(path);
         if (pMesh != nullptr) return pMesh;
 
-        auto [result, mesh] = Mesh::FromObj(this, path);
+        auto [result, mesh] = Mesh::FromObj(*this, path);
         if (!result) return nullptr;
-        _meshes[path] = mesh;
-        return &_meshes[path];
+
+        return CreateMesh(path, mesh);
+    }
+
+    Mesh* Engine::CreateMesh(const std::string &name, Mesh mesh) {
+        Mesh* pMesh = GetMesh(name);
+        if (pMesh != nullptr) return nullptr;
+
+        mesh.vertexBuffer = CreateBuffer(
+            mesh.vertices.size() * sizeof(Vertex), 
+            vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vma::AllocationCreateFlagBits::eDedicatedMemory,
+            {},
+            vma::MemoryUsage::eAuto
+        );
+
+        UploadMemory(mesh.vertexBuffer, mesh.vertices.data(), 0, mesh.GetVertexBufferSize());
+
+        _meshes[name] = mesh;
+
+        return &_meshes[name];
     }
 
     Texture* Engine::CreateTexture(const std::string &name, const std::string &path) {

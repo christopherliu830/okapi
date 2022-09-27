@@ -1,4 +1,5 @@
 #include "actor.h"
+#include "cube.h"
 #include "graphics/graphics.h"
 #include "graphics/render_system.h"
 #include "graphics/renderable.h"
@@ -66,10 +67,14 @@ int main(int argc, char* args[] ) {
     graphics.CreateTexture("lost-empire", "assets/lost-empire/lost-empire-RGBA.png");
     graphics.BindTexture(graphics.GetMaterial("default"), "lost-empire");
 
+    Primitives::Cube cube { graphics };
+
+    std::vector<entt::entity> entities;
     for(auto i = 0u; i < 10u; i++) {
         const auto entity = registry.create();
         registry.emplace<Transform>(entity, glm::mat4 {1.0f});
-        registry.emplace<Graphics::Renderable>(entity, monkey);
+        registry.emplace<Graphics::Renderable>(entity, cube.renderable);
+        entities.push_back(entity);
     }
 
     const auto entity = registry.create();
@@ -97,6 +102,13 @@ int main(int argc, char* args[] ) {
         gui.Render();
 
         graphics.Render();
+        auto view = registry.view<Transform>();
+
+        for(auto entity : entities) {
+            Transform& transform = view.get<Transform>(entity);
+            transform.matrix = glm::rotate(transform.matrix, 0.1f, glm::vec3(0.5f, 0.5f, 0.5f));
+        }
+
         SDL_Delay((int)(1.f/60.f*1000.f));
     }
 

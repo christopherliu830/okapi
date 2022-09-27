@@ -57,30 +57,19 @@ namespace Graphics {
 
     // Allocate buffer's data and map into GPU readable data.
     vk::Result Mesh::Allocate() {
-        vertexBuffer = _engine->CreateBuffer(
-            vertices.size() * sizeof(Vertex), 
-            vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
-            vma::AllocationCreateFlagBits::eDedicatedMemory,
-            {},
-            vma::MemoryUsage::eAuto
-        );
-
-        _engine->UploadMemory(vertexBuffer, vertices.data(), 0, GetVertexBufferSize());
-
         return vk::Result::eSuccess;
     }
 
     void Mesh::Destroy() {
-        _engine->DestroyBuffer(vertexBuffer);
         vertices.clear();
     }
 
-    std::pair<bool, Mesh> Mesh::FromObj(Engine *engine, const std::string &path) {
+    std::pair<bool, Mesh> Mesh::FromObj(Engine& engine, const std::string &path) {
 
         tinyobj::ObjReaderConfig config;
         tinyobj::ObjReader reader;
 
-        Mesh m {engine};
+        Mesh m;
 
         if (!reader.ParseFromFile(path.c_str(), config)) {
             if (!reader.Error().empty()) {

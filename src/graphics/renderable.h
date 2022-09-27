@@ -16,7 +16,6 @@ namespace Graphics {
     struct Renderable {
         Mesh* mesh;
         Material* material;
-        Texture* texture;
     };
 
 };

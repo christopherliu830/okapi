@@ -27,22 +27,16 @@ namespace Graphics {
     class Mesh {
 
     public:
-        Mesh() {}
-        Mesh(Engine *engine) : _engine(engine) {}
-
         AllocatedBuffer vertexBuffer;
         std::vector<Vertex> vertices;
 
+        vk::Result Allocate();
         void Destroy();
-        static std::pair<bool, Mesh> FromObj(Engine *engine, const std::string &path);
+        static std::pair<bool, Mesh> FromObj(Engine& engine, const std::string &path);
 
         size_t GetVertexBufferSize() {
             return vertices.size() * sizeof(Vertex);
         }
-
-    private:
-        vk::Result Allocate();
-        Engine* _engine;
     };
 
     struct MeshPushConstants {

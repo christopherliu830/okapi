@@ -70,6 +70,7 @@ namespace Graphics {
         AllocatedImage* GetImage(const std::string& name);
         Material* GetMaterial(const std::string& name);
         Mesh* CreateMesh(const std::string& name);
+        Mesh* CreateMesh(const std::string& name, Mesh mesh);
         Texture* CreateTexture(const std::string& name, const std::string& path);
         void BindTexture(Material* material, const std::string& name);
         Material* CreateMaterial(vk::Pipeline pipeline, vk::PipelineLayout layout, const std::string &name);
