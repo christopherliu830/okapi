@@ -72,7 +72,7 @@ int main(int argc, char* args[] ) {
     std::vector<entt::entity> entities;
     for(auto i = 0u; i < 10u; i++) {
         const auto entity = registry.create();
-        registry.emplace<Transform>(entity, glm::mat4 {1.0f});
+        registry.emplace<Transform>(entity, glm::translate(glm::mat4 {1.0f}, glm::vec3 {cos(i * .31415*2) * 5, sin(i * .31415*2) * 5, 0}));
         registry.emplace<Graphics::Renderable>(entity, cube.renderable);
         entities.push_back(entity);
     }
