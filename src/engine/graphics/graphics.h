@@ -184,13 +184,14 @@ namespace Graphics {
         void InitAllocator();
 
         void CloseVulkan();
+        void TeardownSwapchain();
         void TeardownPerframe(Perframe &perframe);
         void TeardownDescriptors();
         void TeardownFramebuffers();
 
         vk::Result AcquireNextImage(uint32_t *index);
         vk::Result Present(Perframe *perframe);
-        void Resize(uint32_t width, uint32_t height);
+        void Resize();
 
         vk::DebugUtilsMessengerCreateInfoEXT GetDebugUtilsMessengerCreateInfo();
         vk::PresentModeKHR ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);

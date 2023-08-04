@@ -1,5 +1,6 @@
 add_subdirectory(graphics)
 add_subdirectory(gui)
+add_subdirectory(input)
 add_subdirectory(primitives)
 
 find_package(SDL2 CONFIG REQUIRED)

@@ -3,6 +3,7 @@
 #include "graphics/render_system.h"
 #include "graphics/renderable.h"
 #include "gui/gui.h"
+#include "input.h"
 #include "logging.h"
 #include <entt/entt.hpp>
 #include <string>
@@ -46,6 +47,9 @@ int main(int argc, char* args[] ) {
     bool quit = false;
     Graphics::Engine graphics;
     Graphics::RenderSystem renderSystem {graphics};
+
+    Input input { false };
+
     Gui::Gui gui {graphics};
 
     entt::registry registry;
@@ -83,23 +87,30 @@ int main(int argc, char* args[] ) {
 
     SDL_Event e;
     while (!quit) {
+
+        // Poll events until there are no more events on the event queue.
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) {
                 quit = true;
             }
 
             gui.PollEvents(e);
+            input.Parse(e);
         }
 
         gravitySystem.Update(registry, 0);
 
-        graphics.BeginFrame();
+        if (graphics.BeginFrame() == nullptr) {
+            // The graphics system isn't ready to begin a frame yet.
+            continue;
+        }
         gui.BeginFrame();
 
         renderSystem.Update(registry, 0);
-        gui.Render();
 
+        gui.Render();
         graphics.Render();
+
         auto view = registry.view<Transform>();
 
         for(auto entity : entities) {
@@ -107,7 +118,8 @@ int main(int argc, char* args[] ) {
             transform.matrix = glm::rotate(transform.matrix, 0.1f, glm::vec3(0.5f, 0.5f, 0.5f));
         }
 
-        SDL_Delay((int)(1.f/60.f*1000.f));
+        input.Reset();
+        SDL_Delay((int)(input.KeyDown ? 0 : 1.f/60.f*1000.f));
     }
 
     graphics.WaitIdle();

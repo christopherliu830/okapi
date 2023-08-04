@@ -112,7 +112,7 @@ namespace Graphics {
         }
 
         window = SDL_CreateWindow(
-            "Space Crawler 0.1.0",
+            "Okapi",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             SCREEN_WIDTH, SCREEN_HEIGHT,
             SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
@@ -224,7 +224,6 @@ namespace Graphics {
             DebugUtilsMessengerCallback,
         };
     }
-
 
     void Engine::InitPhysicalDeviceAndSurface() {
         vk::Result result;
@@ -960,7 +959,7 @@ namespace Graphics {
         switch(res) {
             case vk::Result::eSuboptimalKHR:
             case vk::Result::eErrorOutOfDateKHR:
-                Resize(_swapchainDimensions.width, _swapchainDimensions.height);
+                Resize();
                 return nullptr;
             case vk::Result::eSuccess:
                 break;
@@ -999,10 +998,10 @@ namespace Graphics {
         vk::PipelineStageFlags waitStage {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
         vk::SubmitInfo info {
-            perframe->swapchainAcquireSemaphore,
-            waitStage,
-            perframe->primaryCommandBuffer,
-            perframe->swapchainReleaseSemaphore
+            perframe->swapchainAcquireSemaphore, // Wait Semaphores
+            waitStage, // Wait Stage Mask
+            perframe->primaryCommandBuffer, // Command Buffer 
+            perframe->swapchainReleaseSemaphore // Signal Semaphores
         };
 
         VK_CHECK(_queue.submit(info, perframe->queueSubmitFence));
@@ -1011,7 +1010,7 @@ namespace Graphics {
 
         if (res == vk::Result::eSuboptimalKHR || res == vk::Result::eErrorOutOfDateKHR)
         {
-            Resize(_swapchainDimensions.width, _swapchainDimensions.height);
+            Resize();
         }
         else if (res != vk::Result::eSuccess)
         {
@@ -1049,7 +1048,7 @@ namespace Graphics {
 
         if (res == vk::Result::eSuboptimalKHR || res == vk::Result::eErrorOutOfDateKHR)
         {
-            Resize(_swapchainDimensions.width, _swapchainDimensions.height);
+            Resize();
         }
         else if (res != vk::Result::eSuccess)
         {
@@ -1074,7 +1073,7 @@ namespace Graphics {
 
         std::tie(result, *image) = _device.acquireNextImageKHR(_swapchain, UINT64_MAX, acquireSemaphore);
 
-        if (result != vk::Result::eSuccess) {
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
             _recycledSemaphores.push_back(acquireSemaphore);
             return result;
         }
@@ -1116,7 +1115,7 @@ namespace Graphics {
         return (vk::Result)vkQueuePresentKHR(_queue, reinterpret_cast<VkPresentInfoKHR *>(&present));
     }
 
-    void Engine::Resize(uint32_t width, uint32_t height) {
+    void Engine::Resize() {
         if (!_device) {
             return;
         }
@@ -1132,6 +1131,7 @@ namespace Graphics {
 
         VK_CHECK(_device.waitIdle());
 
+        _device.destroyImageView(_depthImageView);
         _allocator.destroyImage(_depthImage.image, _depthImage.allocation);
 
         TeardownFramebuffers();
