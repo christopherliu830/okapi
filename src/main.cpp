@@ -23,7 +23,6 @@ struct Velocity {
 
 float globalvar = 0;
 
-// class GravitySystem : EntitySystem {
 class GravitySystem {
 public:
     void Update(entt::registry &registry, float deltaTime) {

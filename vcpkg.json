@@ -3,6 +3,10 @@
   "name": "okapi",
   "version": "0.1.0",
   "dependencies": [
+    {
+      "name": "sdl2",
+      "features": [ "vulkan" ]
+    },
     "sdl2",
     "glm",
     "vulkan",
