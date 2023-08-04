@@ -1,4 +1,3 @@
-#include "actor.h"
 #include "cube.h"
 #include "graphics/graphics.h"
 #include "graphics/render_system.h"

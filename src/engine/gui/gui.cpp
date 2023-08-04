@@ -19,6 +19,5 @@ namespace Gui {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame(_engine.window);
         ImGui::NewFrame();
-        ImGui::ShowDemoWindow();
     }
 };
